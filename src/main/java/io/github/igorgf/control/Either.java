@@ -36,7 +36,7 @@ public sealed interface Either<L, R> {
     // Convenience
     Either<R, L> swap();
 
-   <X extends Exception> void ifLeft(
+    <X extends Exception> void ifLeft(
             CheckedConsumer<? super L, ? extends X> action
     ) throws X;
 
@@ -48,9 +48,15 @@ public sealed interface Either<L, R> {
 
     boolean isRight();
 
+    Option<L> getLeft();
+
+    Option<R> getRight();
+
 }
 
 record Right<L, R>(R value) implements Either<L, R> {
+
+    Right { Objects.requireNonNull(value); }
 
     @Override
     public <R2, X extends Exception> Either<L, R2> map(
@@ -111,9 +117,21 @@ record Right<L, R>(R value) implements Either<L, R> {
         return true;
     }
 
+    @Override
+    public Option<L> getLeft() {
+        return Option.empty();
+    }
+
+    @Override
+    public Option<R> getRight() {
+        return Option.of(this.value);
+    }
+
 }
 
 record Left<L, R>(L value) implements Either<L, R> {
+
+    Left { Objects.requireNonNull(value); }
 
     @SuppressWarnings("unchecked")
     @Override
@@ -174,6 +192,16 @@ record Left<L, R>(L value) implements Either<L, R> {
     @Override
     public boolean isRight() {
         return false;
+    }
+
+    @Override
+    public Option<L> getLeft() {
+        return Option.of(this.value);
+    }
+
+    @Override
+    public Option<R> getRight() {
+        return Option.empty();
     }
 
 }
