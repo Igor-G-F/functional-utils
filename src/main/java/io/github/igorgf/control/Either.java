@@ -3,6 +3,8 @@ package io.github.igorgf.control;
 import io.github.igorgf.function.CheckedConsumer;
 import io.github.igorgf.function.CheckedFunction;
 
+import java.util.Objects;
+
 public sealed interface Either<L, R> {
 
     // Construction
@@ -62,6 +64,7 @@ record Right<L, R>(R value) implements Either<L, R> {
     public <R2, X extends Exception> Either<L, R2> map(
             CheckedFunction<? super R, ? extends R2, ? extends X> mapper
     ) throws X {
+        Objects.requireNonNull(mapper);
         return Either.right(mapper.apply(value));
     }
 
@@ -69,6 +72,7 @@ record Right<L, R>(R value) implements Either<L, R> {
     public <R2, X extends Exception> Either<L, R2> flatMap(
             CheckedFunction<? super R, ? extends Either<L, R2>, ? extends X> mapper
     ) throws X {
+        Objects.requireNonNull(mapper);
         return mapper.apply(value);
     }
 
@@ -77,6 +81,7 @@ record Right<L, R>(R value) implements Either<L, R> {
             CheckedFunction<? super L, ? extends L2, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends R2, ? extends X2> rightMapper
     ) throws X2 {
+        Objects.requireNonNull(rightMapper);
         return Either.right(rightMapper.apply(value));
     }
 
@@ -90,6 +95,7 @@ record Right<L, R>(R value) implements Either<L, R> {
             CheckedFunction<? super L, ? extends T, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
     ) throws X2 {
+        Objects.requireNonNull(rightMapper);
         return rightMapper.apply(value);
     }
 
@@ -104,6 +110,7 @@ record Right<L, R>(R value) implements Either<L, R> {
     public <X extends Exception> void ifRight(
             CheckedConsumer<? super R, ? extends X> action
     ) throws X {
+        Objects.requireNonNull(action);
         action.accept(value);
     }
 
@@ -154,6 +161,7 @@ record Left<L, R>(L value) implements Either<L, R> {
             CheckedFunction<? super L, ? extends L2, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends R2, ? extends X2> rightMapper
     ) throws X1 {
+        Objects.requireNonNull(leftMapper);
         return Either.left(leftMapper.apply(value));
     }
 
@@ -167,6 +175,7 @@ record Left<L, R>(L value) implements Either<L, R> {
             CheckedFunction<? super L, ? extends T, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
     ) throws X1 {
+        Objects.requireNonNull(leftMapper);
         return leftMapper.apply(value);
     }
 
@@ -174,6 +183,7 @@ record Left<L, R>(L value) implements Either<L, R> {
     public <X extends Exception> void ifLeft(
             CheckedConsumer<? super L, ? extends X> action
     ) throws X {
+        Objects.requireNonNull(action);
         action.accept(value);
     }
 

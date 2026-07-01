@@ -75,7 +75,7 @@ public sealed interface Option<E> {
             Supplier<? extends X> exceptionSupplier
     ) throws X;
 
-    E orThrow() throws OptionIsEmptyException;
+    E orThrow() throws EmptyValueException;
 
 }
 
@@ -263,7 +263,7 @@ record Empty<E>() implements Option<E> {
     }
 
     @Override
-    public E orThrow() throws OptionIsEmptyException {
-        throw new OptionIsEmptyException();
+    public E orThrow() throws EmptyValueException {
+        throw new EmptyValueException("Option is " + this.getClass().getCanonicalName());
     }
 }

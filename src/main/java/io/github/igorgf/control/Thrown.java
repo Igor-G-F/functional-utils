@@ -25,29 +25,43 @@ public record Thrown(Exception thrown) {
     }
 
     @SafeVarargs
-    public final Thrown handle(Consumer<Exception> handler, Class<? extends Exception>... exceptions) {
+    public final Thrown handle(
+            Consumer<Exception> handler,
+            Class<? extends Exception>... exceptions
+    ) {
         if (exceptions.length == 0 || Set.of(exceptions).contains(thrown.getClass())) {
+            Objects.requireNonNull(handler);
             handler.accept(thrown);
         }
         return this;
     }
 
     @SafeVarargs
-    public final Thrown rethrow(Class<? extends Exception>... exceptions) {
+    public final Thrown rethrow(
+            Class<? extends Exception>... exceptions
+    ) {
         if (exceptions.length == 0 || Set.of(exceptions).contains(thrown.getClass())) {
             throw new RuntimeException(thrown);
         }
         return this;
     }
 
-    public <T extends Exception, X extends Exception> Thrown handleChecked(CheckedConsumer<T, X> handler, Class<T> exceptionType) throws X {
+    public <T extends Exception, X extends Exception> Thrown handleChecked(
+            CheckedConsumer<T, X> handler,
+            Class<T> exceptionType
+    ) throws X {
+        Objects.requireNonNull(exceptionType);
         if (exceptionType.isInstance(this.thrown)) {
+            Objects.requireNonNull(handler);
             handler.accept(exceptionType.cast(this.thrown));
         }
         return this;
     }
 
-    public <T extends Exception> Thrown rethrowChecked(Class<T> exceptionType) throws T {
+    public <T extends Exception> Thrown rethrowChecked(
+            Class<T> exceptionType
+    ) throws T {
+        Objects.requireNonNull(exceptionType);
         if (exceptionType.isAssignableFrom(this.thrown.getClass())) {
             throw exceptionType.cast(this.thrown);
         }
