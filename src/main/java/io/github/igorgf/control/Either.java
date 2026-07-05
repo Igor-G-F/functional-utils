@@ -5,7 +5,50 @@ import io.github.igorgf.function.CheckedFunction;
 
 import java.util.Objects;
 
-public sealed interface Either<L, R> {
+/**
+ * A disjoint union (sum type) representing exactly one of two possible
+ * outcomes: {@code Left<L>} or {@code Right<R>}. This is <b>NOT</b> a
+ * "pair type". {@code Either} is a general purpose XOR type for reasoning about
+ * two mutually exclusive results.
+ *
+ * <p>
+ * {@code Either} is:
+ * <ul>
+ *   <li>
+ *       <b>right biased</b>: operations like {@link #map}, {@link #flatMap},
+ *       etc. target the {@code Right<R>} value.
+ *   </li>
+ *   <li>
+ *       A <b>functor</b>: {@link #map} transforms the {@code Right<R>} value,
+ *       preserving the context.
+ *   </li>
+ *   <li>
+ *       A <b>monad</b>: {@link #flatMap} chains operations that produce
+ *       {@code Either}, short-circuiting on the first {@link Left}. For
+ *       accumulating multiple independent errors rather than short-circuiting,
+ *       use {@link Validation}.
+ *   </li>
+ *   <li>
+ *       A <b>bi-functor</b>: {@link #bimap} transforms both {@link Left} and
+ *       {@link Right} values independently.
+ *   </li>
+ * </ul>
+ * <p>
+ * {@link #fold} is the catamorphism for {@code Either}, it collapses both
+ * possible cases into a single value by providing a handler for each.
+ *
+ * @apiNote
+ * By convention, when one side represents an undesirable outcome
+ * (error, exception, null, etc.), it is placed on the {@code Left<L>}, this is
+ * a common functional usage pattern, it is not a semantic requirement.
+ *
+ * @author Igor Flakiewicz
+ * @since 1.0.0
+ *
+ * @param <L> the Left value type
+ * @param <R> the Right value type
+ */
+public sealed interface Either<L, R> permits Right, Left {
 
     // Construction
     static <L, R> Either<L, R> left(L value) {
@@ -17,17 +60,17 @@ public sealed interface Either<L, R> {
     }
 
     // Monad
-    <R2, X extends Exception> Either<L, R2> map(
-            CheckedFunction<? super R, ? extends R2, ? extends X> mapper
+    <T, X extends Exception> Either<L, T> map(
+            CheckedFunction<? super R, ? extends T, ? extends X> mapper
     ) throws X;
 
-    <R2, X extends Exception> Either<L, R2> flatMap(
-            CheckedFunction<? super R, ? extends Either<L, R2>, ? extends X> mapper
+    <T, X extends Exception> Either<L, T> flatMap(
+            CheckedFunction<? super R, ? extends Either<L, T>, ? extends X> mapper
     ) throws X;
 
-    <L2, R2, X1 extends Exception, X2 extends Exception> Either<L2, R2> bimap(
-            CheckedFunction<? super L, ? extends L2, ? extends X1> leftMapper,
-            CheckedFunction<? super R, ? extends R2, ? extends X2> rightMapper
+    <S, T, X1 extends Exception, X2 extends Exception> Either<S, T> bimap(
+            CheckedFunction<? super L, ? extends S, ? extends X1> leftMapper,
+            CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
     ) throws X1, X2;
 
     <T, X1 extends Exception, X2 extends Exception> T fold(
@@ -61,25 +104,25 @@ record Right<L, R>(R value) implements Either<L, R> {
     Right { Objects.requireNonNull(value); }
 
     @Override
-    public <R2, X extends Exception> Either<L, R2> map(
-            CheckedFunction<? super R, ? extends R2, ? extends X> mapper
+    public <T, X extends Exception> Either<L, T> map(
+            CheckedFunction<? super R, ? extends T, ? extends X> mapper
     ) throws X {
         Objects.requireNonNull(mapper);
         return Either.right(mapper.apply(value));
     }
 
     @Override
-    public <R2, X extends Exception> Either<L, R2> flatMap(
-            CheckedFunction<? super R, ? extends Either<L, R2>, ? extends X> mapper
+    public <T, X extends Exception> Either<L, T> flatMap(
+            CheckedFunction<? super R, ? extends Either<L, T>, ? extends X> mapper
     ) throws X {
         Objects.requireNonNull(mapper);
         return mapper.apply(value);
     }
 
     @Override
-    public <L2, R2, X1 extends Exception, X2 extends Exception> Either<L2, R2> bimap(
-            CheckedFunction<? super L, ? extends L2, ? extends X1> leftMapper,
-            CheckedFunction<? super R, ? extends R2, ? extends X2> rightMapper
+    public <S, T, X1 extends Exception, X2 extends Exception> Either<S, T> bimap(
+            CheckedFunction<? super L, ? extends S, ? extends X1> leftMapper,
+            CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
     ) throws X2 {
         Objects.requireNonNull(rightMapper);
         return Either.right(rightMapper.apply(value));
@@ -142,24 +185,24 @@ record Left<L, R>(L value) implements Either<L, R> {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <R2, X extends Exception> Either<L, R2> map(
-            CheckedFunction<? super R, ? extends R2, ? extends X> mapper
+    public <T, X extends Exception> Either<L, T> map(
+            CheckedFunction<? super R, ? extends T, ? extends X> mapper
     ) {
-        return (Either<L, R2>) this;
+        return (Either<L, T>) this;
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public <R2, X extends Exception> Either<L, R2> flatMap(
-            CheckedFunction<? super R, ? extends Either<L, R2>, ? extends X> mapper
+    public <T, X extends Exception> Either<L, T> flatMap(
+            CheckedFunction<? super R, ? extends Either<L, T>, ? extends X> mapper
     ) {
-        return (Either<L, R2>) this;
+        return (Either<L, T>) this;
     }
 
     @Override
-    public <L2, R2, X1 extends Exception, X2 extends Exception> Either<L2, R2> bimap(
-            CheckedFunction<? super L, ? extends L2, ? extends X1> leftMapper,
-            CheckedFunction<? super R, ? extends R2, ? extends X2> rightMapper
+    public <S, T, X1 extends Exception, X2 extends Exception> Either<S, T> bimap(
+            CheckedFunction<? super L, ? extends S, ? extends X1> leftMapper,
+            CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
     ) throws X1 {
         Objects.requireNonNull(leftMapper);
         return Either.left(leftMapper.apply(value));

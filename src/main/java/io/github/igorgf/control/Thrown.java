@@ -25,7 +25,7 @@ public record Thrown(Exception thrown) {
     }
 
     @SafeVarargs
-    public final Thrown handle(
+    public final Thrown handleWhenInstanceOf(
             Consumer<Exception> handler,
             Class<? extends Exception>... exceptions
     ) {
@@ -37,7 +37,7 @@ public record Thrown(Exception thrown) {
     }
 
     @SafeVarargs
-    public final Thrown rethrow(
+    public final Thrown rethrowWhenInstanceOf(
             Class<? extends Exception>... exceptions
     ) {
         if (exceptions.length == 0 || Set.of(exceptions).contains(thrown.getClass())) {
@@ -66,5 +66,15 @@ public record Thrown(Exception thrown) {
             throw exceptionType.cast(this.thrown);
         }
         return this;
+    }
+
+    public RuntimeException getAsUnchecked() {
+        return this.thrown instanceof RuntimeException
+                ? (RuntimeException) this.thrown
+                : new RuntimeException(this.thrown);
+    }
+
+    public void rethrowUnchecked() {
+        throw getAsUnchecked();
     }
 }

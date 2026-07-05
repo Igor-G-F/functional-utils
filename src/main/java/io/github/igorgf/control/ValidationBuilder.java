@@ -46,14 +46,12 @@ public class ValidationBuilder<E> {
         return this;
     }
 
-    public <R> Validation<E, R> validate(
-            Supplier<? extends R> resultSupplier
+    public <T> Validation<E, T> validate(
+            Supplier<? extends T> resultSupplier
     ) {
         Objects.requireNonNull(resultSupplier);
         List<E> errors = collectErrors();
-        return errors.isEmpty()
-                ? Validation.valid(resultSupplier.get())
-                : Validation.invalid(errors);
+        return errors.isEmpty() ? new Invalid<>(errors) : Validation.valid(resultSupplier.get());
     }
 
     private List<E> collectErrors() {

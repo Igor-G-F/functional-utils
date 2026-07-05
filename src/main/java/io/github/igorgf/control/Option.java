@@ -9,33 +9,58 @@ import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-public sealed interface Option<E> {
+/**
+ * A sum type representing the presence or absence of a value, as a null-safe
+ * alternative to {@link java.util.Optional}.
+ * <p>
+ * {@code Option} is:
+ * <ul>
+ *   <li>
+ *       A <b>functor</b>: {@link #map} transforms the contained value.
+ *   </li>
+ *   <li>
+ *       A <b>monad</b>: {@link #flatMap} chains operations that may not
+ *       produce a value, short-circuiting on {@link Empty}.
+ *   </li>
+ * </ul>
+ *
+ * @apiNote
+ * Unlike {@link java.util.Optional}, {@code Option} is a sealed type with
+ * explicit {@link Present} and {@link Empty} cases, improving the pattern
+ * matching experience.
+ *
+ * @author Igor Flakiewicz
+ * @since 1.0.0
+ *
+ * @param <T> the contained value type
+ */
+public sealed interface Option<T> {
 
     // Construction
-    static <E> Option<E> of(E value) {
+    static <T> Option<T> of(T value) {
         return new Present<>(value);
     }
 
-    static <E> Option<E> ofNullable(E value) {
+    static <T> Option<T> ofNullable(T value) {
         return value == null ? new Empty<>() : new Present<>(value);
     }
 
-    static <E> Option<E> empty() {
+    static <T> Option<T> empty() {
         return new Empty<>();
     }
 
     // Monad
-    <F, X extends Exception> Option<F> map(
-            CheckedFunction<? super E, ? extends F, ? extends X> mapper
+    <U, X extends Exception> Option<U> map(
+            CheckedFunction<? super T, ? extends U, ? extends X> mapper
     ) throws X;
 
-    <F, X extends Exception> Option<F> flatMap(
-            CheckedFunction<? super E, ? extends Option<? extends F>, ? extends X> mapper
+    <U, X extends Exception> Option<U> flatMap(
+            CheckedFunction<? super T, ? extends Option<? extends U>, ? extends X> mapper
     ) throws X;
 
-    <F, X extends Exception> F fold(
-            CheckedFunction<? super E, ? extends F, ? extends X> presentMapper,
-            CheckedSupplier<? extends F, ? extends X> emptySupplier
+    <U, X extends Exception> U fold(
+            CheckedFunction<? super T, ? extends U, ? extends X> presentMapper,
+            CheckedSupplier<? extends U, ? extends X> emptySupplier
     ) throws X;
 
     // Convenience
@@ -44,7 +69,7 @@ public sealed interface Option<E> {
     boolean isEmpty();
 
     <X extends Exception> void ifPresent(
-            CheckedConsumer<? super E, ? extends X> action
+            CheckedConsumer<? super T, ? extends X> action
     ) throws X;
 
     <X extends Exception> void ifEmpty(
@@ -52,40 +77,40 @@ public sealed interface Option<E> {
     ) throws X;
 
     <X extends Exception> void ifPresentOrElse(
-            CheckedConsumer<? super E, ? extends X> action,
+            CheckedConsumer<? super T, ? extends X> action,
             CheckedRunnable<? extends X> emptyAction
     ) throws X;
 
-    Option<E> filter(Predicate<? super E> predicate);
+    Option<T> filter(Predicate<? super T> predicate);
 
     @SuppressWarnings("unchecked")
-    default <X extends Exception> Option<E> or(
-            CheckedSupplier<? extends Option<? extends E>, ? extends X> supplier
+    default <X extends Exception> Option<T> or(
+            CheckedSupplier<? extends Option<? extends T>, ? extends X> supplier
     ) throws X {
-        return isPresent() ? this : (Option<E>) Objects.requireNonNull(supplier.get());
+        return isPresent() ? this : (Option<T>) Objects.requireNonNull(supplier.get());
     }
 
-    E orElse(E other);
+    T orElse(T other);
 
-    <X extends Exception> E orElseGet(
-            CheckedSupplier<? extends E, ? extends X> supplier
+    <X extends Exception> T orElseGet(
+            CheckedSupplier<? extends T, ? extends X> supplier
     ) throws X;
 
-    <X extends Exception> E orElseThrow(
+    <X extends Exception> T orElseThrow(
             Supplier<? extends X> exceptionSupplier
     ) throws X;
 
-    E orThrow() throws EmptyValueException;
+    T orThrow() throws EmptyValueException;
 
 }
 
-record Present<E>(E value) implements Option<E> {
+record Present<T>(T value) implements Option<T> {
 
     Present { Objects.requireNonNull(value); }
 
     @Override
-    public <F, X extends Exception> Option<F> map(
-            CheckedFunction<? super E, ? extends F, ? extends X> mapper
+    public <U, X extends Exception> Option<U> map(
+            CheckedFunction<? super T, ? extends U, ? extends X> mapper
     ) throws X {
         Objects.requireNonNull(mapper);
         return new Present<>(mapper.apply(this.value));
@@ -93,17 +118,17 @@ record Present<E>(E value) implements Option<E> {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <F, X extends Exception> Option<F> flatMap(
-            CheckedFunction<? super E, ? extends Option<? extends F>, ? extends X> mapper
+    public <U, X extends Exception> Option<U> flatMap(
+            CheckedFunction<? super T, ? extends Option<? extends U>, ? extends X> mapper
     ) throws X {
         Objects.requireNonNull(mapper);
-        return (Option<F>) mapper.apply(this.value);
+        return (Option<U>) mapper.apply(this.value);
     }
 
     @Override
-    public <F, X extends Exception> F fold(
-            CheckedFunction<? super E, ? extends F, ? extends X> presentMapper,
-            CheckedSupplier<? extends F, ? extends X> emptySupplier
+    public <U, X extends Exception> U fold(
+            CheckedFunction<? super T, ? extends U, ? extends X> presentMapper,
+            CheckedSupplier<? extends U, ? extends X> emptySupplier
     ) throws X {
         Objects.requireNonNull(presentMapper);
         return presentMapper.apply(this.value);
@@ -121,7 +146,7 @@ record Present<E>(E value) implements Option<E> {
 
     @Override
     public <X extends Exception> void ifPresent(
-            CheckedConsumer<? super E, ? extends X> action
+            CheckedConsumer<? super T, ? extends X> action
     ) throws X {
         Objects.requireNonNull(action);
         action.accept(this.value);
@@ -136,7 +161,7 @@ record Present<E>(E value) implements Option<E> {
 
     @Override
     public <X extends Exception> void ifPresentOrElse(
-            CheckedConsumer<? super E, ? extends X> action,
+            CheckedConsumer<? super T, ? extends X> action,
             CheckedRunnable<? extends X> emptyAction
     ) throws X {
         Objects.requireNonNull(action);
@@ -144,58 +169,58 @@ record Present<E>(E value) implements Option<E> {
     }
 
     @Override
-    public Option<E> filter(
-            Predicate<? super E> predicate
+    public Option<T> filter(
+            Predicate<? super T> predicate
     ) {
         Objects.requireNonNull(predicate);
         return predicate.test(this.value) ? this : new Empty<>();
     }
 
     @Override
-    public E orElse(E other) {
+    public T orElse(T other) {
         return this.value;
     }
 
     @Override
-    public <X extends Exception> E orElseGet(
-            CheckedSupplier<? extends E, ? extends X> supplier
+    public <X extends Exception> T orElseGet(
+            CheckedSupplier<? extends T, ? extends X> supplier
     ) {
         return this.value;
     }
 
     @Override
-    public <X extends Exception> E orElseThrow(
+    public <X extends Exception> T orElseThrow(
             Supplier<? extends X> exceptionSupplier
     ) {
         return this.value;
     }
 
     @Override
-    public E orThrow() {
+    public T orThrow() {
         return this.value;
     }
 }
 
-record Empty<E>() implements Option<E> {
+record Empty<T>() implements Option<T> {
 
     @Override
-    public <F, X extends Exception> Option<F> map(
-            CheckedFunction<? super E, ? extends F, ? extends X> mapper
+    public <U, X extends Exception> Option<U> map(
+            CheckedFunction<? super T, ? extends U, ? extends X> mapper
     ) {
         return new Empty<>();
     }
 
     @Override
-    public <F, X extends Exception> Option<F> flatMap(
-            CheckedFunction<? super E, ? extends Option<? extends F>, ? extends X> mapper
+    public <U, X extends Exception> Option<U> flatMap(
+            CheckedFunction<? super T, ? extends Option<? extends U>, ? extends X> mapper
     ) {
         return new Empty<>();
     }
 
     @Override
-    public <F, X extends Exception> F fold(
-            CheckedFunction<? super E, ? extends F, ? extends X> presentMapper,
-            CheckedSupplier<? extends F, ? extends X> emptySupplier
+    public <U, X extends Exception> U fold(
+            CheckedFunction<? super T, ? extends U, ? extends X> presentMapper,
+            CheckedSupplier<? extends U, ? extends X> emptySupplier
     ) throws X {
         Objects.requireNonNull(emptySupplier);
         return emptySupplier.get();
@@ -213,7 +238,7 @@ record Empty<E>() implements Option<E> {
 
     @Override
     public <X extends Exception> void ifPresent(
-            CheckedConsumer<? super E, ? extends X> action
+            CheckedConsumer<? super T, ? extends X> action
     ) {
         // do nothing
     }
@@ -228,7 +253,7 @@ record Empty<E>() implements Option<E> {
 
     @Override
     public <X extends Exception> void ifPresentOrElse(
-            CheckedConsumer<? super E, ? extends X> action,
+            CheckedConsumer<? super T, ? extends X> action,
             CheckedRunnable<? extends X> emptyAction
     ) throws X {
         Objects.requireNonNull(emptyAction);
@@ -236,34 +261,34 @@ record Empty<E>() implements Option<E> {
     }
 
     @Override
-    public Option<E> filter(
-            Predicate<? super E> predicate
+    public Option<T> filter(
+            Predicate<? super T> predicate
     ) {
         return this;
     }
 
     @Override
-    public E orElse(E other) {
+    public T orElse(T other) {
         return other;
     }
 
     @Override
-    public <X extends Exception> E orElseGet(
-            CheckedSupplier<? extends E, ? extends X> supplier
+    public <X extends Exception> T orElseGet(
+            CheckedSupplier<? extends T, ? extends X> supplier
     ) throws X {
         Objects.requireNonNull(supplier);
         return supplier.get();
     }
 
     @Override
-    public <X extends Exception> E orElseThrow(
+    public <X extends Exception> T orElseThrow(
             Supplier<? extends X> exceptionSupplier
     ) throws X {
         throw exceptionSupplier.get();
     }
 
     @Override
-    public E orThrow() throws EmptyValueException {
+    public T orThrow() throws EmptyValueException {
         throw new EmptyValueException("Option is " + this.getClass().getCanonicalName());
     }
 }

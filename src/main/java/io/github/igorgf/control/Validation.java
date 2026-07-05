@@ -9,20 +9,57 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
 
-public sealed interface Validation<E, R> {
+/**
+ * A disjoint union (sum type) representing a validated value {@code Valid<T>}
+ * or an accumulated {@code List<E>} of errors contained by {@code Invalid<E>}.
+ * This is <b>NOT</b> a "pair type". {@code Validation} is a special case XOR
+ * type for reasoning about accumulation of distinct errors.
+ * <p>
+ * {@code Validation} is:
+ * <ul>
+ *   <li>
+ *       <b>right biased</b>: operations like {@link #flatMap} target the
+ *       {@code Valid<T>} validated value.
+ *   </li>
+ *   <li>
+ *       A <b>monad</b>: {@link #flatMap} chains dependent validations,
+ *       short-circuiting on the first {@link Invalid}. For sequential error
+ *       handling with short-circuiting use {@link Either}.
+ *   </li>
+ *   <li>
+ *       A <b>bi-functor</b>: {@link #bimap} transforms both {@link Valid} and
+ *       {@link Invalid} results independently.
+ *   </li>
+ *   <li>
+ *       An <b>applicative functor</b>: {@link #combine} evaluates multiple
+ *       independent validations and <em>accumulates all errors</em>, unlike
+ *       {@link #flatMap} which short-circuits.
+ *   </li>
+ * </ul>
+ *
+ * @apiNote
+ * Use {@code Validation} when you want to collect all validation errors
+ * (e.g. form validation) rather than stopping at the first failure. For
+ * sequential, non-accumulative error handling with short-circuiting use
+ * {@link Either}.
+ *
+ * @param <E> the error element/container type
+ * @param <T> the validated result type
+ */
+public sealed interface Validation<E, T> permits Valid, Invalid {
 
     // Constructors
 
-    static <E, R> Validation<E, R> valid(R value) { return new Valid<>(value); }
+    static <E, T> Validation<E, T> valid(T value) { return new Valid<>(value); }
 
-    static <E, R> Validation<E, R> invalid(E error) {
+    static <E, T> Validation<E, T> invalid(E error) {
         Objects.requireNonNull(error);
         return new Invalid<>(List.of(error));
     }
 
-    static <E, R> Validation<E, R> invalid(List<E> errors) {
+    static <E, T> Validation<E, T> invalid(List<E> errors) throws EmptyValueException {
         Objects.requireNonNull(errors);
-        if (errors.isEmpty()) throw new EmptyValueException("errors param cannot be empty");
+        if (errors.isEmpty()) throw new EmptyValueException("errors cannot be empty");
         return new Invalid<>(errors);
     }
 
@@ -30,43 +67,43 @@ public sealed interface Validation<E, R> {
 
     // Composition: monadic
 
-    // bimap: "transform errors and value"
-    <E2, R2, X1 extends Exception, X2 extends Exception> Validation<E2, R2> bimap(
-            CheckedFunction<? super List<E>, ? extends List<E2>, ? extends X1> errorMapper,
-            CheckedFunction<? super R, ? extends R2, ? extends X2> valueMapper
-    ) throws X1, X2;
-
     // flatMap: "decide next step based on value"
-    <R2, X extends Exception> Validation<E, R2> flatMap(
-            CheckedFunction<? super R, ? extends Validation<E, R2>, ? extends X> mapper
+    <S, X extends Exception> Validation<E, S> flatMap(
+            CheckedFunction<? super T, ? extends Validation<E, S>, ? extends X> mapper
     ) throws X;
 
+    // bimap: "transform errors and value"
+    <U, S, X1 extends Exception, X2 extends Exception> Validation<U, S> bimap(
+            CheckedFunction<? super List<E>, ? extends List<U>, ? extends X1> errorMapper,
+            CheckedFunction<? super T, ? extends S, ? extends X2> valueMapper
+    ) throws X1, X2;
+
     // biflatMap: "decide next step based on either side"
-    <E2, R2, X1 extends Exception, X2 extends Exception> Validation<E2, R2> biflatMap(
-            CheckedFunction<? super List<E>, ? extends Validation<E2, R2>, ? extends X1> errorMapper,
-            CheckedFunction<? super R, ? extends Validation<E2, R2>, ? extends X2> valueMapper
+    <U, S, X1 extends Exception, X2 extends Exception> Validation<U, S> biflatMap(
+            CheckedFunction<? super List<E>, ? extends Validation<U, S>, ? extends X1> errorMapper,
+            CheckedFunction<? super T, ? extends Validation<U, S>, ? extends X2> valueMapper
     ) throws X1, X2;
 
     // Composition: applicative
 
-    <R2, R3> Validation<E, R3> combine(
-            Validation<E, R2> other,
-            BiFunction<R, R2, R3> combiner
+    <S, U> Validation<E, U> combine(
+            Validation<E, S> other,
+            BiFunction<T, S, U> combiner
     );
 
-    <R2> Validation<E, R> combine(
-            Validation<E, R2> other
+    <S> Validation<E, T> combine(
+            Validation<E, S> other
     );
 
     // Elimination
 
-    <T, X1 extends Exception, X2 extends Exception> T fold(
-            CheckedFunction<? super List<E>, ? extends T, ? extends X1> invalidMapper,
-            CheckedFunction<? super R, ? extends T, ? extends X2> validMapper
+    <U, X1 extends Exception, X2 extends Exception> U fold(
+            CheckedFunction<? super List<E>, ? extends U, ? extends X1> invalidMapper,
+            CheckedFunction<? super T, ? extends U, ? extends X2> validMapper
     ) throws X1, X2;
 
     <X extends Exception> void ifValid(
-            CheckedConsumer<? super R, ? extends X> action
+            CheckedConsumer<? super T, ? extends X> action
     ) throws X;
 
     <X extends Exception> void ifInvalid(
@@ -75,18 +112,18 @@ public sealed interface Validation<E, R> {
 
     // Extraction
 
-    Either<List<E>, R> toEither();
+    Either<List<E>, T> toEither();
 
-    Option<R> get();
+    Option<T> get();
 
     List<E> getErrors();
 
-    <X extends Exception> R orElseGet(
-            CheckedSupplier<? extends R, ? extends X> supplier
+    <X extends Exception> T orElseGet(
+            CheckedSupplier<? extends T, ? extends X> supplier
     ) throws X;
 
-    <X extends Exception> Validation<E, R> or(
-            CheckedSupplier<? extends Validation<E, R>, ? extends X> supplier
+    <X extends Exception> Validation<E, T> or(
+            CheckedSupplier<? extends Validation<E, T>, ? extends X> supplier
     ) throws X;
 
     // Inspection
@@ -96,65 +133,65 @@ public sealed interface Validation<E, R> {
 
 }
 
-record Valid<E, R>(R value) implements Validation<E, R> {
+record Valid<E, T>(T value) implements Validation<E, T> {
 
     Valid { Objects.requireNonNull(value); }
 
     @Override
-    public <E2, R2, X1 extends Exception, X2 extends Exception> Validation<E2, R2> bimap(
-            CheckedFunction<? super List<E>, ? extends List<E2>, ? extends X1> errorMapper,
-            CheckedFunction<? super R, ? extends R2, ? extends X2> valueMapper
+    public <U, S, X1 extends Exception, X2 extends Exception> Validation<U, S> bimap(
+            CheckedFunction<? super List<E>, ? extends List<U>, ? extends X1> errorMapper,
+            CheckedFunction<? super T, ? extends S, ? extends X2> valueMapper
     ) throws X2 {
         Objects.requireNonNull(valueMapper);
         return new Valid<>(valueMapper.apply(value));
     }
 
     @Override
-    public <R2, X extends Exception> Validation<E, R2> flatMap(
-            CheckedFunction<? super R, ? extends Validation<E, R2>, ? extends X> mapper
+    public <S, X extends Exception> Validation<E, S> flatMap(
+            CheckedFunction<? super T, ? extends Validation<E, S>, ? extends X> mapper
     ) throws X {
         Objects.requireNonNull(mapper);
         return mapper.apply(value);
     }
 
     @Override
-    public <E2, R2, X1 extends Exception, X2 extends Exception> Validation<E2, R2> biflatMap(
-            CheckedFunction<? super List<E>, ? extends Validation<E2, R2>, ? extends X1> errorMapper,
-            CheckedFunction<? super R, ? extends Validation<E2, R2>, ? extends X2> valueMapper
+    public <U, S, X1 extends Exception, X2 extends Exception> Validation<U, S> biflatMap(
+            CheckedFunction<? super List<E>, ? extends Validation<U, S>, ? extends X1> errorMapper,
+            CheckedFunction<? super T, ? extends Validation<U, S>, ? extends X2> valueMapper
     ) throws X2 {
         Objects.requireNonNull(valueMapper);
         return valueMapper.apply(value);
     }
 
     @Override
-    public <R2, R3> Validation<E, R3> combine(
-            Validation<E, R2> other,
-            BiFunction<R, R2, R3> combiner
+    public <S, U> Validation<E, U> combine(
+            Validation<E, S> other,
+            BiFunction<T, S, U> combiner
     ) {
         Objects.requireNonNull(other);
         Objects.requireNonNull(combiner);
         return switch (other) {
-            case Valid<E, R2>(var otherValue) -> new Valid<>(combiner.apply(this.value, otherValue));
-            case Invalid<E, R2>(var errors) -> new Invalid<>(errors);
+            case Valid<E, S>(var otherValue) -> new Valid<>(combiner.apply(this.value, otherValue));
+            case Invalid<E, S>(var errors) -> new Invalid<>(errors);
         };
     }
 
     @Override
-    public <R2> Validation<E, R> combine(
-            Validation<E, R2> other
+    public <S> Validation<E, T> combine(
+            Validation<E, S> other
     ) {
         Objects.requireNonNull(other);
         return switch (other) {
-            case Valid<E, R2>(_) -> this;
-            case Invalid<E, R2>(var errors) -> new Invalid<>(errors);
+            case Valid<E, S>(_) -> this;
+            case Invalid<E, S>(var errors) -> new Invalid<>(errors);
         };
     }
 
 
     @Override
-    public <T, X1 extends Exception, X2 extends Exception> T fold(
-            CheckedFunction<? super List<E>, ? extends T, ? extends X1> invalidMapper,
-            CheckedFunction<? super R, ? extends T, ? extends X2> validMapper
+    public <U, X1 extends Exception, X2 extends Exception> U fold(
+            CheckedFunction<? super List<E>, ? extends U, ? extends X1> invalidMapper,
+            CheckedFunction<? super T, ? extends U, ? extends X2> validMapper
     ) throws X2 {
         Objects.requireNonNull(validMapper);
         return validMapper.apply(this.value);
@@ -162,7 +199,7 @@ record Valid<E, R>(R value) implements Validation<E, R> {
 
     @Override
     public <X extends Exception> void ifValid(
-            CheckedConsumer<? super R, ? extends X> action
+            CheckedConsumer<? super T, ? extends X> action
     ) throws X {
         Objects.requireNonNull(action);
         action.accept(this.value);
@@ -176,12 +213,12 @@ record Valid<E, R>(R value) implements Validation<E, R> {
     }
 
     @Override
-    public Either<List<E>, R> toEither() {
+    public Either<List<E>, T> toEither() {
         return Either.right(this.value);
     }
 
     @Override
-    public Option<R> get() {
+    public Option<T> get() {
         return Option.of(this.value);
     }
 
@@ -191,15 +228,15 @@ record Valid<E, R>(R value) implements Validation<E, R> {
     }
 
     @Override
-    public <X extends Exception> R orElseGet(
-            CheckedSupplier<? extends R, ? extends X> supplier
+    public <X extends Exception> T orElseGet(
+            CheckedSupplier<? extends T, ? extends X> supplier
     ) {
         return this.value;
     }
 
     @Override
-    public <X extends Exception> Validation<E, R> or(
-            CheckedSupplier<? extends Validation<E, R>, ? extends X> supplier
+    public <X extends Exception> Validation<E, T> or(
+            CheckedSupplier<? extends Validation<E, T>, ? extends X> supplier
     ) {
         return this;
     }
@@ -215,12 +252,12 @@ record Valid<E, R>(R value) implements Validation<E, R> {
     }
 }
 
-record Invalid<E, R>(List<E> errors) implements Validation<E, R> {
+record Invalid<E, T>(List<E> errors) implements Validation<E, T> {
 
     @Override
-    public <E2, R2, X1 extends Exception, X2 extends Exception> Validation<E2, R2> bimap(
-            CheckedFunction<? super List<E>, ? extends List<E2>, ? extends X1> errorMapper,
-            CheckedFunction<? super R, ? extends R2, ? extends X2> valueMapper
+    public <U, S, X1 extends Exception, X2 extends Exception> Validation<U, S> bimap(
+            CheckedFunction<? super List<E>, ? extends List<U>, ? extends X1> errorMapper,
+            CheckedFunction<? super T, ? extends S, ? extends X2> valueMapper
     ) throws X1 {
         Objects.requireNonNull(errorMapper);
         return new Invalid<>(errorMapper.apply(errors));
@@ -228,41 +265,41 @@ record Invalid<E, R>(List<E> errors) implements Validation<E, R> {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <R2, X extends Exception> Validation<E, R2> flatMap(
-            CheckedFunction<? super R, ? extends Validation<E, R2>, ? extends X> mapper
+    public <S, X extends Exception> Validation<E, S> flatMap(
+            CheckedFunction<? super T, ? extends Validation<E, S>, ? extends X> mapper
     ) {
-        return (Validation<E, R2>) this;
+        return (Validation<E, S>) this;
     }
 
     @Override
-    public <E2, R2, X1 extends Exception, X2 extends Exception> Validation<E2, R2> biflatMap(
-            CheckedFunction<? super List<E>, ? extends Validation<E2, R2>, ? extends X1> errorMapper,
-            CheckedFunction<? super R, ? extends Validation<E2, R2>, ? extends X2> valueMapper
+    public <U, S, X1 extends Exception, X2 extends Exception> Validation<U, S> biflatMap(
+            CheckedFunction<? super List<E>, ? extends Validation<U, S>, ? extends X1> errorMapper,
+            CheckedFunction<? super T, ? extends Validation<U, S>, ? extends X2> valueMapper
     ) throws X1 {
         Objects.requireNonNull(errorMapper);
         return errorMapper.apply(this.errors);
     }
 
     @Override
-    public <R2, R3> Validation<E, R3> combine(
-            Validation<E, R2> other,
-            BiFunction<R, R2, R3> combiner
+    public <S, U> Validation<E, U> combine(
+            Validation<E, S> other,
+            BiFunction<T, S, U> combiner
     ) {
         Objects.requireNonNull(other);
         return switch (other) {
-            case Valid<E, R2>(_) -> new Invalid<>(this.errors);
-            case Invalid<E, R2>(var otherErrors) -> new Invalid<>(merge(otherErrors, this.errors));
+            case Valid<E, S>(_) -> new Invalid<>(this.errors);
+            case Invalid<E, S>(var otherErrors) -> new Invalid<>(merge(otherErrors, this.errors));
         };
     }
 
     @Override
-    public <R2> Validation<E, R> combine(
-            Validation<E, R2> other
+    public <S> Validation<E, T> combine(
+            Validation<E, S> other
     ) {
         Objects.requireNonNull(other);
         return switch (other) {
-            case Valid<E, R2>(_) -> this;
-            case Invalid<E, R2>(var otherErrors) -> new Invalid<>(merge(otherErrors, this.errors));
+            case Valid<E, S>(_) -> this;
+            case Invalid<E, S>(var otherErrors) -> new Invalid<>(merge(otherErrors, this.errors));
         };
     }
 
@@ -274,9 +311,9 @@ record Invalid<E, R>(List<E> errors) implements Validation<E, R> {
     }
 
     @Override
-    public <T, X1 extends Exception, X2 extends Exception> T fold(
-            CheckedFunction<? super List<E>, ? extends T, ? extends X1> invalidMapper,
-            CheckedFunction<? super R, ? extends T, ? extends X2> validMapper
+    public <U, X1 extends Exception, X2 extends Exception> U fold(
+            CheckedFunction<? super List<E>, ? extends U, ? extends X1> invalidMapper,
+            CheckedFunction<? super T, ? extends U, ? extends X2> validMapper
     ) throws X1 {
         Objects.requireNonNull(invalidMapper);
         return invalidMapper.apply(this.errors);
@@ -284,7 +321,7 @@ record Invalid<E, R>(List<E> errors) implements Validation<E, R> {
 
     @Override
     public <X extends Exception> void ifValid(
-            CheckedConsumer<? super R, ? extends X> action
+            CheckedConsumer<? super T, ? extends X> action
     ) {
         // do nothing
     }
@@ -298,12 +335,12 @@ record Invalid<E, R>(List<E> errors) implements Validation<E, R> {
     }
 
     @Override
-    public Either<List<E>, R> toEither() {
+    public Either<List<E>, T> toEither() {
         return Either.left(this.errors);
     }
 
     @Override
-    public Option<R> get() {
+    public Option<T> get() {
         return Option.empty();
     }
 
@@ -313,16 +350,16 @@ record Invalid<E, R>(List<E> errors) implements Validation<E, R> {
     }
 
     @Override
-    public <X extends Exception> R orElseGet(
-            CheckedSupplier<? extends R, ? extends X> supplier
+    public <X extends Exception> T orElseGet(
+            CheckedSupplier<? extends T, ? extends X> supplier
     ) throws X {
         Objects.requireNonNull(supplier);
         return supplier.get();
     }
 
     @Override
-    public <X extends Exception> Validation<E, R> or(
-            CheckedSupplier<? extends Validation<E, R>, ? extends X> supplier
+    public <X extends Exception> Validation<E, T> or(
+            CheckedSupplier<? extends Validation<E, T>, ? extends X> supplier
     ) throws X {
         Objects.requireNonNull(supplier);
         return supplier.get();
