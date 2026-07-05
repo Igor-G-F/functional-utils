@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html","k":"18"},{"l":"io.github.igorgf.control"},{"l":"io.github.igorgf.function"}];updateSearchResults();
