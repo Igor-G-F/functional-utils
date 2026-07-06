@@ -6,19 +6,19 @@
  * functional style:
  * <ul>
  *   <li>
- *       {@link io.github.igorgf.control.Option} — presence or absence of a
+ *       {@link io.github.igorgf.control.Option} - presence or absence of a
  *       value
  *   </li>
  *   <li>
- *       {@link io.github.igorgf.control.Either} — a disjoint union of two
+ *       {@link io.github.igorgf.control.Either} - a disjoint union of two
  *       possible outcomes
  *   </li>
  *   <li>
- *       {@link io.github.igorgf.control.Validation} — a validated value or an
+ *       {@link io.github.igorgf.control.Validation} - a validated value or an
  *       accumulated list of errors
  *   </li>
  *   <li>
- *       {@link io.github.igorgf.control.Try} — a computation that may throw,
+ *       {@link io.github.igorgf.control.Try} - a computation that may throw,
  *       with exception handling
  *   </li>
  * </ul>
