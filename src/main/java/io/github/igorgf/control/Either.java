@@ -11,7 +11,7 @@ import java.util.Objects;
  * "pair type". {@code Either} is a general purpose XOR type for reasoning about
  * two mutually exclusive results.
  * <p>
- * <h5>{@code Either} features:</h5>
+ * <b>{@code Either} features:</b>
  * <ul>
  *   <li>
  *       Is <b>null safe</b>: {@link Left} or {@link Right} can never contain a
@@ -35,7 +35,7 @@ import java.util.Objects;
  *   </li>
  * </ul>
  * <p>
- * <h5>Exception Handling:</h5>
+ * <b>Exception Handling:</b><br>
  * Methods accepting a {@link CheckedFunction} or {@link CheckedSupplier}
  * propagate checked exceptions transparently through a generic
  * {@code X extends Exception} parameter. The compiler will only require
@@ -59,8 +59,8 @@ import java.util.Objects;
  *         return n * n;
  *     }, o -> o);
  * }</pre>
- * <h5>Alternative Types:</h5>
- * For accumulating multiple validation errors, use {@link Validation}. </br>
+ * <b>Alternative Types:</b><br>
+ * For accumulating multiple validation errors, use {@link Validation}. <br>
  * For single value presence or absence handling, use {@link Option}.
  *
  * @see Left

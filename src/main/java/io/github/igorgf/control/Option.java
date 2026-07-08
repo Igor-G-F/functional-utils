@@ -16,7 +16,7 @@ import java.util.function.Supplier;
  * {@link Empty} cases, it propagates checked exceptions from mapping functions, 
  * and does not accept {@code null} values.
  * <p>
- * <h5>{@code Option} features:</h5>
+ * <b>{@code Option} features:</b>
  * <ul>
  *   <li>
  *       Is <b>null safe</b>: {@link Present} can never contain a null value,
@@ -40,7 +40,7 @@ import java.util.function.Supplier;
  *   </li>
  * </ul>
  * <p>
- * <h5>Exception Handling:</h5>
+ * <b>Exception Handling:</b><br>
  * Methods accepting a {@link CheckedFunction} or {@link CheckedSupplier}
  * propagate checked exceptions transparently through a generic
  * {@code X extends Exception} parameter. The compiler will only require
@@ -65,8 +65,8 @@ import java.util.function.Supplier;
  *     });
  * }</pre>
  * <p>
- * <h5>Alternative Types:</h5>    
- * For accumulating multiple validation errors, use {@link Validation}. </br>
+ * <b>Alternative Types:</b><br>
+ * For accumulating multiple validation errors, use {@link Validation}. <br>
  * For sequential error-handling with short-circuiting, use {@link Either}.
  *
  * @see Present
