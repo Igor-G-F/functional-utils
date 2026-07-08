@@ -11,10 +11,22 @@ import java.util.function.Supplier;
 
 /**
  * A sum type representing the presence or absence of a value, as a null-safe
- * alternative to {@link java.util.Optional}.
+ * alternative to {@link java.util.Optional}. Unlike {@link java.util.Optional}, 
+ * {@code Option} is a sealed type with explicit {@link Present} and 
+ * {@link Empty} cases, it propagates checked exceptions from mapping functions, 
+ * and does not accept {@code null} values.
  * <p>
- * {@code Option} is:
+ * <h5>{@code Option} features:</h5>
  * <ul>
+ *   <li>
+ *       Is <b>null safe</b>: {@link Present} can never contain a null value,
+ *       {@code Option} exposes only one {@code null} accepting entry
+ *       {@link #ofNullable(Object)}, and one exit
+ *       {@link #orElseNullable(Object)}, for interoperation with null-returning
+ *       Java APIs. The entire API otherwise rejects {@code null} at every
+ *       boundary: constructors, mapping functions, and suppliers all throw
+ *       {@link NullPointerException} on {@code null}.
+ *   </li>
  *   <li>
  *       A <b>functor</b>: {@link #map} transforms the contained value.
  *   </li>
@@ -28,14 +40,7 @@ import java.util.function.Supplier;
  *   </li>
  * </ul>
  * <p>
- * Unlike {@link java.util.Optional}, {@code Option} is a sealed type with
- * explicit {@link Present} and {@link Empty} cases, it propagates checked
- * exceptions from mapping functions, and does not accept {@code null} values.
- * <p>
- * For accumulating multiple validation errors, use {@link Validation}. </br>
- * For sequential error-handling with short-circuiting, use {@link Either}.
- *
- * @apiNote
+ * <h5>Exception Handling:</h5>
  * Methods accepting a {@link CheckedFunction} or {@link CheckedSupplier}
  * propagate checked exceptions transparently through a generic
  * {@code X extends Exception} parameter. The compiler will only require
@@ -59,6 +64,10 @@ import java.util.function.Supplier;
  *         return n * n;
  *     });
  * }</pre>
+ * <p>
+ * <h5>Alternative Types:</h5>    
+ * For accumulating multiple validation errors, use {@link Validation}. </br>
+ * For sequential error-handling with short-circuiting, use {@link Either}.
  *
  * @see Present
  * @see Empty
@@ -111,12 +120,12 @@ public sealed interface Option<T> permits Present, Empty {
      * Due to type erasure, {@link Empty} instances carry no runtime type
      * information. Two {@link Empty} instances are equal by
      * {@link Empty#equals(Object)} (as records with no components) regardless
-     * of their type parameter. Therefore, the following returns {@code true}:
+     * of their type parameter. Therefore:
      * <pre>{@code
      *     var oString = Option.<String>empty();
      *     var oInt = Option.<Integer>empty();
      *     //noinspection EqualsBetweenInconvertibleTypes
-     *     return oString.equals(oInt);
+     *     assert oString.equals(oInt);
      * }</pre>
      * <p>
      * Use {@link #isEmpty()} or {@link #isPresent()} for emptiness checks.
@@ -245,17 +254,19 @@ public sealed interface Option<T> permits Present, Empty {
      *         {@link Present}. {@code U} from the {@code emptySupplier} if
      *         {@code this} is a {@link Empty}.
      *
-     * @throws X If the {@code presentMapper} or {@code emptySupplier} throw a
-     *         checked exception, it is propagated to the caller.
+     * @throws X1 If the {@code presentMapper} throws a checked exception, it is
+     *         propagated to the caller.
+     * @throws X2 If the {@code emptySupplier} throws a checked exception, it is
+     *         propagated to the caller.
      * @throws NullPointerException If {@code presentMapper} or
      *         {@code emptySupplier} are {@code null} during the lazy
      *         evaluation, or if either of them return a {@code null} during the
      *         lazy evaluation.
      */
-    <U, X extends Exception> U fold(
-            CheckedFunction<? super T, ? extends U, ? extends X> presentMapper,
-            CheckedSupplier<? extends U, ? extends X> emptySupplier
-    ) throws X;
+    <U, X1 extends Exception, X2 extends Exception> U fold(
+            CheckedFunction<? super T, ? extends U, ? extends X1> presentMapper,
+            CheckedSupplier<? extends U, ? extends X2> emptySupplier
+    ) throws X1, X2;
 
     /**
      * Is {@code this} a {@link Present}.
@@ -554,16 +565,15 @@ record Present<T>(T value) implements Option<T> {
      *
      * @return {@code U} from the {@code presentMapper}.
      *
-     * @throws X If the {@code presentMapper} throws a checked exception, it is
-     *         propagated to the caller.
+     * @throws X1 {@inheritDoc}
      * @throws NullPointerException If {@code presentMapper} is {@code null} or
      * it returns a {@code null}.
      */
     @Override
-    public <U, X extends Exception> U fold(
-            CheckedFunction<? super T, ? extends U, ? extends X> presentMapper,
-            CheckedSupplier<? extends U, ? extends X> emptySupplier
-    ) throws X {
+    public <U, X1 extends Exception, X2 extends Exception> U fold(
+            CheckedFunction<? super T, ? extends U, ? extends X1> presentMapper,
+            CheckedSupplier<? extends U, ? extends X2> emptySupplier
+    ) throws X1 {
         Objects.requireNonNull(presentMapper);
         return Objects.requireNonNull(presentMapper.apply(this.value));
     }
@@ -721,16 +731,15 @@ record Empty<T>() implements Option<T> {
      *
      * @return {@code U} from the {@code emptySupplier}.
      *
-     * @throws X If the {@code emptySupplier} throws a checked exception, it is
-     *         propagated to the caller.
+     * @throws X2 {@inheritDoc}
      * @throws NullPointerException If {@code emptySupplier} is {@code null} or
      * it returns a {@code null}.
      */
     @Override
-    public <U, X extends Exception> U fold(
-            CheckedFunction<? super T, ? extends U, ? extends X> presentMapper,
-            CheckedSupplier<? extends U, ? extends X> emptySupplier
-    ) throws X {
+    public <U, X1 extends Exception, X2 extends Exception> U fold(
+            CheckedFunction<? super T, ? extends U, ? extends X1> presentMapper,
+            CheckedSupplier<? extends U, ? extends X2> emptySupplier
+    ) throws X2 {
         Objects.requireNonNull(emptySupplier);
         return Objects.requireNonNull(emptySupplier.get());
     }
@@ -847,6 +856,8 @@ record Empty<T>() implements Option<T> {
     }
 
     /**
+     * Always throws {@code X}, because {@code this} is a {@link Empty}.
+     * 
      * @throws X Because {@code this} is a {@link Empty}.
      * @throws NullPointerException {@inheritDoc}
      */
@@ -859,6 +870,9 @@ record Empty<T>() implements Option<T> {
     }
 
     /**
+     * Always throws {@link EmptyValueException}, because {@code this} is a 
+     * {@link Empty}.
+     * 
      * @throws EmptyValueException Because {@code this} is a {@link Empty}.
      */
     @Override
