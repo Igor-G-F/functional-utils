@@ -31,7 +31,7 @@
  * it is guaranteed non-null.
  * <p>
  * <b>Exception policy:</b> Checked exceptions are used only for precondition
- * violations (e.g. {@code Validation.invalid(List.of())} throws
+ * violations (e.g. {@code Validation.accumulated(List.of())} throws
  * {@link io.github.igorgf.control.EmptyValueException}).
  * </p>
  *
