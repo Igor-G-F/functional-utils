@@ -30,9 +30,12 @@
  * null safe by construction, once a value is wrapped in the above listed types
  * it is guaranteed non-null.
  * <p>
- * <b>Exception policy:</b> Checked exceptions are used only for precondition
+ * <b>Exception policy:</b> Checked exceptions are used for precondition
  * violations (e.g. {@code Validation.accumulated(List.of())} throws
- * {@link io.github.igorgf.control.EmptyValueException}).
+ * {@link io.github.igorgf.control.EmptyValueException}). Also, members of this
+ * package use the checked function aware functional interfaces from
+ * {@link io.github.igorgf.function}, to ensure checked exception propagation
+ * support.
  * </p>
  *
  * @author Igor Flakiewicz
