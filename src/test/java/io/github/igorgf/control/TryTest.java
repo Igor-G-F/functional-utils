@@ -151,7 +151,7 @@ class TryTest {
                     .execute();
 
             assertEquals(Either.left(new Thrown(exception)), result);
-            result.ifLeft(t -> assertTrue(
+            result.getLeft().ifPresent(t -> assertTrue(
                     Arrays.stream(t.get().getSuppressed())
                             .toList()
                             .contains(exception2)
