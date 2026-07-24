@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TryWithResourcesTest {
 
+    //TODO :add tests for consumer and biconsumer
+
     private static final byte[] arr = "Hello World".getBytes();
 
     private static class CloseableInputStream implements AutoCloseable {

@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TryTest {
 
+    //TODO :add tests for supplier, runnable, consumer, and biconsumer
+
     @Nested
     class TryFunction {
 

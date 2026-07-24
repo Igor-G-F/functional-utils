@@ -1,8 +1,6 @@
 package io.github.igorgf.control;
 
-import io.github.igorgf.function.CheckedBiFunction;
-import io.github.igorgf.function.CheckedFunction;
-import io.github.igorgf.function.CheckedSupplier;
+import io.github.igorgf.function.*;
 
 import java.util.Objects;
 
@@ -45,7 +43,7 @@ import java.util.Objects;
  *             .execute();
  * }</pre>
  * For a computation over two resources, supply both via
- * {@link TryBiFunctionWithResourcesStep#withResources(CheckedSupplier, CheckedSupplier)};
+ * {@link TryBiResourceStep#withResources(CheckedSupplier, CheckedSupplier)};
  * they are opened in the given order and closed in reverse:
  * <pre>{@code
  *     Either<Thrown, Long> bytesCopied = TryWithResources
@@ -75,28 +73,28 @@ public sealed interface TryWithResources<R> extends Try<R> permits TryFunctionWi
      * {@link AutoCloseable} resource.
      * <p>
      * Records the {@code function} to be executed and returns a
-     * {@link TryFunctionWithResourceStep}. The resource must then be supplied
-     * via {@link TryFunctionWithResourceStep#withResource(CheckedSupplier)} to
+     * {@link TryResourceStep}. The resource must then be supplied
+     * via {@link TryResourceStep#withResource(CheckedSupplier)} to
      * produce an executable {@code Try}. The {@code function} is not invoked
      * here.
      *
-     * @see TryFunctionWithResourceStep
+     * @see TryResourceStep
      *
      * @param <T> The {@link AutoCloseable} resource type consumed by the
      *        {@code function}.
      * @param <R> The result type produced by the {@code function}.
      * @param function The fallible computation to describe.
      *
-     * @return A {@code TryFunctionWithResourceStep<T, R>} awaiting its resource
+     * @return A {@code TryResourceStep<T, R>} awaiting its resource
      *         supplier.
      *
      * @throws NullPointerException If {@code function} is {@code null}.
      */
-    static <T extends AutoCloseable, R> TryFunctionWithResourceStep<T, R> of(
+    static <T extends AutoCloseable, R> TryResourceStep<T, R> of(
             CheckedFunction<T, R, Throwable> function
     ) {
         Objects.requireNonNull(function);
-        return new TryFunctionWithResourceStep<>(function);
+        return new TryResourceStep<>(function);
     }
 
     /**
@@ -104,13 +102,13 @@ public sealed interface TryWithResources<R> extends Try<R> permits TryFunctionWi
      * {@link AutoCloseable} resources.
      * <p>
      * Records the {@code function} to be executed and returns a
-     * {@link TryBiFunctionWithResourcesStep}. The resources must then be
+     * {@link TryBiResourceStep}. The resources must then be
      * supplied via
-     * {@link TryBiFunctionWithResourcesStep#withResources(CheckedSupplier, CheckedSupplier)}
+     * {@link TryBiResourceStep#withResources(CheckedSupplier, CheckedSupplier)}
      * to produce an executable {@code Try}. The {@code function} is not invoked
      * here.
      *
-     * @see TryBiFunctionWithResourcesStep
+     * @see TryBiResourceStep
      *
      * @param <T> The first {@link AutoCloseable} resource type consumed by the
      *        {@code function}.
@@ -119,16 +117,81 @@ public sealed interface TryWithResources<R> extends Try<R> permits TryFunctionWi
      * @param <R> The result type produced by the {@code function}.
      * @param function The fallible computation to describe.
      *
-     * @return A {@code TryBiFunctionWithResourcesStep<T, U, R>} awaiting its
+     * @return A {@code TryBiResourceStep<T, U, R>} awaiting its
      *         resource suppliers.
      *
      * @throws NullPointerException If {@code function} is {@code null}.
      */
-    static <T extends AutoCloseable, U extends AutoCloseable, R> TryBiFunctionWithResourcesStep<T, U, R> of(
+    static <T extends AutoCloseable, U extends AutoCloseable, R> TryBiResourceStep<T, U, R> of(
             CheckedBiFunction<T, U, R, Throwable> function
     ) {
         Objects.requireNonNull(function);
-        return new TryBiFunctionWithResourcesStep<>(function);
+        return new TryBiResourceStep<>(function);
+    }
+
+    /**
+     * Entry point for describing a fallible computation over a single
+     * {@link AutoCloseable} resource.
+     * <p>
+     * Records the {@code consumer} to be executed and returns a
+     * {@link TryResourceStep}. The resource must then be supplied
+     * via {@link TryResourceStep#withResource(CheckedSupplier)} to
+     * produce an executable {@code Try}. The {@code consumer} is not invoked
+     * here.
+     *
+     * @see TryResourceStep
+     *
+     * @param <T> The {@link AutoCloseable} resource type consumed by the
+     *        {@code consumer}.
+     * @param consumer The fallible computation to describe.
+     *
+     * @return A {@code TryResourceStep<T, Unit>} awaiting its resource
+     *         supplier.
+     *
+     * @throws NullPointerException If {@code consumer} is {@code null}.
+     */
+    static <T extends AutoCloseable> TryResourceStep<T, Unit> consume(
+            CheckedConsumer<T, Throwable> consumer
+    ) {
+        Objects.requireNonNull(consumer);
+        return new TryResourceStep<>(t -> {
+            consumer.accept(t);
+            return Unit.INSTANCE;
+        });
+    }
+
+    /**
+     * Entry point for describing a fallible computation over two
+     * {@link AutoCloseable} resources.
+     * <p>
+     * Records the {@code consumer} to be executed and returns a
+     * {@link TryBiResourceStep}. The resources must then be
+     * supplied via
+     * {@link TryBiResourceStep#withResources(CheckedSupplier, CheckedSupplier)}
+     * to produce an executable {@code Try}. The {@code consumer} is not invoked
+     * here.
+     *
+     * @see TryBiResourceStep
+     *
+     * @param <T> The first {@link AutoCloseable} resource type consumed by the
+     *        {@code consumer}.
+     * @param <U> The second {@link AutoCloseable} resource type consumed by the
+     *        {@code consumer}.
+     * @param consumer The fallible computation to describe.
+     *
+     * @return A {@code TryBiResourceStep<T, U, Unit>} awaiting its
+     *         resource suppliers.
+     *
+     * @throws NullPointerException If {@code consumer} is {@code null}.
+     */
+    static <T extends AutoCloseable, U extends AutoCloseable> TryBiResourceStep<T, U, Unit> consume(
+            CheckedBiConsumer<T, U, Throwable> consumer
+    ) {
+        Objects.requireNonNull(consumer);
+        return new TryBiResourceStep<>((t, u) -> {
+            consumer.accept(t, u);
+            return Unit.INSTANCE;
+        });
     }
 
     /**
@@ -143,7 +206,7 @@ public sealed interface TryWithResources<R> extends Try<R> permits TryFunctionWi
      * @param <R> The result type produced by the {@code function}.
      * @param function The described fallible computation.
      */
-    record TryFunctionWithResourceStep<T extends AutoCloseable, R>(
+    record TryResourceStep<T extends AutoCloseable, R>(
             CheckedFunction<T, R, Throwable> function
     ) {
         /**
@@ -161,7 +224,9 @@ public sealed interface TryWithResources<R> extends Try<R> permits TryFunctionWi
          *
          * @throws NullPointerException If {@code supplier} is {@code null}.
          */
-        public Try<R> withResource(CheckedSupplier<T, Throwable> supplier) {
+        public Try<R> withResource(
+                CheckedSupplier<T, Throwable> supplier
+        ) {
             Objects.requireNonNull(supplier);
             return new TryFunctionWithResource<>(function, supplier);
         }
@@ -181,7 +246,7 @@ public sealed interface TryWithResources<R> extends Try<R> permits TryFunctionWi
      * @param <R> The result type produced by the {@code function}.
      * @param function The described fallible computation.
      */
-    record TryBiFunctionWithResourcesStep<T extends AutoCloseable, U extends AutoCloseable, R>(
+    record TryBiResourceStep<T extends AutoCloseable, U extends AutoCloseable, R>(
             CheckedBiFunction<T, U, R, Throwable> function
     ) {
         /**

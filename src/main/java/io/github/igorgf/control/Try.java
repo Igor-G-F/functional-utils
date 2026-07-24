@@ -1,8 +1,6 @@
 package io.github.igorgf.control;
 
-import io.github.igorgf.function.CheckedBiFunction;
-import io.github.igorgf.function.CheckedFunction;
-import io.github.igorgf.function.CheckedRunnable;
+import io.github.igorgf.function.*;
 
 import java.util.Objects;
 
@@ -44,13 +42,12 @@ import java.util.Objects;
  * not obscure a dying JVM.
  * <p>
  * <b>Staged construction:</b><br>
- * A {@code Try} is assembled in stages: {@link #of(CheckedFunction)} (or
- * {@link #of(CheckedBiFunction)}) records the fallible function and returns an
- * intermediate step; the step then binds the argument(s) to yield an
- * executable {@code Try}. An optional {@link #withFinally(CheckedRunnable)}
- * wraps the computation with an action that always runs. Finally,
- * {@link #execute()} runs everything and collapses the outcome into an
- * {@link Either}:
+ * A {@code Try} is assembled in stages: {@link #of(CheckedFunction)} etc.
+ * records the fallible function and returns an intermediate step; the step then
+ * binds the argument(s) to yield an executable {@code Try}. An optional
+ * {@link #withFinally(CheckedRunnable)} wraps the computation with an action
+ * that always runs. Finally, {@link #execute()} runs everything and collapses
+ * the outcome into an {@link Either}:
  * <pre>{@code
  *     Either<Thrown, Integer> result = Try
  *             .of((String s) -> Integer.parseInt(s))
@@ -108,51 +105,148 @@ public sealed interface Try<R> permits TryWithResources, TryFunction, TryBiFunct
      * Entry point for describing a fallible single-argument computation.
      * <p>
      * Records the {@code function} to be executed and returns a
-     * {@link TryFunctionStep}. The argument must then be supplied via
-     * {@link TryFunctionStep#withParam(Object)} to produce an executable
+     * {@link TryParamStep}. The argument must then be supplied via
+     * {@link TryParamStep#withParam(Object)} to produce an executable
      * {@code Try}. The {@code function} is not invoked here.
      *
-     * @see TryFunctionStep
+     * @see TryParamStep
      *
      * @param <T> The input type of the {@code function}.
      * @param <R> The result type produced by the {@code function}.
      * @param function The fallible computation to describe.
      *
-     * @return A {@code TryFunctionStep<T, R>} awaiting its parameter.
+     * @return A {@code TryParamStep<T, R>} awaiting its parameter.
      *
      * @throws NullPointerException If {@code function} is {@code null}.
      */
-    static <T, R> TryFunctionStep<T, R> of(
+    static <T, R> TryParamStep<T, R> of(
             CheckedFunction<T, R, Throwable> function
     ) {
         Objects.requireNonNull(function);
-        return new TryFunctionStep<>(function);
+        return new TryParamStep<>(function);
     }
 
     /**
      * Entry point for describing a fallible two-argument computation.
      * <p>
      * Records the {@code function} to be executed and returns a
-     * {@link TryBiFunctionStep}. The arguments must then be supplied via
-     * {@link TryBiFunctionStep#withParams(Object, Object)} to produce an
+     * {@link TryBiParamStep}. The arguments must then be supplied via
+     * {@link TryBiParamStep#withParams(Object, Object)} to produce an
      * executable {@code Try}. The {@code function} is not invoked here.
      *
-     * @see TryBiFunctionStep
+     * @see TryBiParamStep
      *
      * @param <T> The first input type of the {@code function}.
      * @param <U> The second input type of the {@code function}.
      * @param <R> The result type produced by the {@code function}.
      * @param function The fallible computation to describe.
      *
-     * @return A {@code TryBiFunctionStep<T, U, R>} awaiting its parameters.
+     * @return A {@code TryBiParamStep<T, U, R>} awaiting its parameters.
      *
      * @throws NullPointerException If {@code function} is {@code null}.
      */
-    static <T, U, R> TryBiFunctionStep<T, U, R> of(
+    static <T, U, R> TryBiParamStep<T, U, R> of(
             CheckedBiFunction<T, U, R, Throwable> function
     ) {
         Objects.requireNonNull(function);
-        return new TryBiFunctionStep<>(function);
+        return new TryBiParamStep<>(function);
+    }
+
+    /**
+     * Entry point for describing a fallible single-argument computation.
+     * <p>
+     * Records the {@code consumer} to be executed and returns a
+     * {@link TryParamStep}. The argument must then be supplied via
+     * {@link TryParamStep#withParam(Object)} to produce an executable
+     * {@code Try}. The {@code consumer} is not invoked here.
+     *
+     * @see TryParamStep
+     *
+     * @param <T> The input type of the {@code consumer}.
+     * @param consumer The fallible computation to describe.
+     *
+     * @return A {@code TryParamStep<T, Unit>} awaiting its parameter.
+     *
+     * @throws NullPointerException If {@code consumer} is {@code null}.
+     */
+    static <T> TryParamStep<T, Unit> consume(
+            CheckedConsumer<T, Throwable> consumer
+    ) {
+        Objects.requireNonNull(consumer);
+        return new TryParamStep<>(t -> {
+            consumer.accept(t);
+            return Unit.INSTANCE;
+        });
+    }
+
+    /**
+     * Entry point for describing a fallible two-argument computation.
+     * <p>
+     * Records the {@code consumer} to be executed and returns a
+     * {@link TryBiParamStep}. The arguments must then be supplied via
+     * {@link TryBiParamStep#withParams(Object, Object)} to produce an 
+     * executable {@code Try}. The {@code consumer} is not invoked here.
+     *
+     * @see TryBiParamStep
+     *
+     * @param <T> The first input type of the {@code consumer}.
+     * @param <U> The second input type of the {@code consumer}.
+     * @param consumer The fallible computation to describe.
+     *
+     * @return A {@code TryBiParamStep<T, U, Unit>} awaiting its parameters.
+     *
+     * @throws NullPointerException If {@code consumer} is {@code null}.
+     */
+    static <T, U> TryBiParamStep<T, U, Unit> consume(
+            CheckedBiConsumer<T, U, Throwable> consumer
+    ) {
+        Objects.requireNonNull(consumer);
+        return new TryBiParamStep<>((t, u) -> {
+            consumer.accept(t, u);
+            return Unit.INSTANCE;
+        });
+    }
+
+    /**
+     * Entry point for describing a fallible computation that produces a value.
+     * <p>
+     * Records the {@code supplier} to be executed and returns a {@link Try}.
+     * The {@code supplier} is not invoked here.
+     *
+     * @param <T> The result type of the {@code supplier}.
+     * @param supplier The fallible computation to describe.
+     *
+     * @return A {@code Try<T>} awaiting execution.
+     *
+     * @throws NullPointerException If {@code supplier} is {@code null}.
+     */
+    static <T> Try<T> supply(
+            CheckedSupplier<T, Throwable> supplier
+    ) {
+        Objects.requireNonNull(supplier);
+        return new TryFunction<>(_ -> supplier.get(), Unit.INSTANCE);
+    }
+
+    /**
+     * Entry point for describing a fallible computation.
+     * <p>
+     * Records the {@code runnable} to be executed and returns a {@link Try}.
+     * The {@code runnable} is not invoked here.
+     *
+     * @param runnable The fallible computation to describe.
+     *
+     * @return A {@code Try<Unit>} awaiting execution.
+     *
+     * @throws NullPointerException If {@code runnable} is {@code null}.
+     */
+    static Try<Unit> run(
+            CheckedRunnable<Throwable> runnable
+    ) {
+        Objects.requireNonNull(runnable);
+        return new TryFunction<>(_ -> {
+            runnable.run();
+            return Unit.INSTANCE;
+        }, Unit.INSTANCE);
     }
 
     /**
@@ -216,7 +310,7 @@ public sealed interface Try<R> permits TryWithResources, TryFunction, TryBiFunct
      * @param <R> The result type produced by the {@code function}.
      * @param function The described fallible computation.
      */
-    record TryFunctionStep<T, R>(
+    record TryParamStep<T, R>(
             CheckedFunction<T, R, Throwable> function
     ) {
         /**
@@ -246,7 +340,7 @@ public sealed interface Try<R> permits TryWithResources, TryFunction, TryBiFunct
      * @param <R> The result type produced by the {@code function}.
      * @param function The described fallible computation.
      */
-    record TryBiFunctionStep<T, U, R>(
+    record TryBiParamStep<T, U, R>(
             CheckedBiFunction<T, U, R, Throwable> function
     ) {
 
@@ -270,7 +364,6 @@ public sealed interface Try<R> permits TryWithResources, TryFunction, TryBiFunct
     }
 
 }
-
 
 /**
  * A {@link Try} describing the application of a single-argument
