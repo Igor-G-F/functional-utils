@@ -12,8 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TryTest {
 
-    //TODO :add tests for supplier, runnable, consumer, and biconsumer
-
     @Nested
     class TryFunction {
 
@@ -36,6 +34,76 @@ class TryTest {
                         throw exception;
                     })
                     .withParam(7)
+                    .execute();
+
+            assertEquals(Either.left(new Thrown(exception)), result);
+        }
+
+        @Test
+        @DisplayName("Given Try of Consumer. When Consumer success. Then Try returns Right of Unit.")
+        void TryConsumer_ConsumerSuccess_ReturnsRight() {
+            var num = new AtomicInteger(1);
+            var result = Try.consume(AtomicInteger::getAndIncrement)
+                    .withParam(num)
+                    .execute();
+
+            assertEquals(Either.right(Unit.INSTANCE), result);
+            assertEquals(2, num.get());
+        }
+
+        @Test
+        @DisplayName("Given Try of Consumer. When Consumer throws X. Then Try returns Left of Throws of X.")
+        void TryConsumer_ConsumerThrows_ReturnsLeft() {
+            final var exception = new Exception();
+
+            var result = Try.consume(_ -> {
+                        throw exception;
+                    })
+                    .withParam(7)
+                    .execute();
+
+            assertEquals(Either.left(new Thrown(exception)), result);
+        }
+
+        @Test
+        @DisplayName("Given Try of Supply. When Supplier returns. Then Try returns Right of R.")
+        void TrySupply_SupplierReturns_ReturnsRight() {
+            var result = Try.supply(() -> 7).execute();
+
+            assertEquals(Either.right(7), result);
+        }
+
+        @Test
+        @DisplayName("Given Try of Supply. When Supplier throws X. Then Try returns Left of Throws of X.")
+        void TrySupply_SupplierThrows_ReturnsLeft() {
+            final var exception = new Exception();
+
+            var result = Try.supply(() -> {
+                        throw exception;
+                    })
+                    .execute();
+
+            assertEquals(Either.left(new Thrown(exception)), result);
+        }
+
+        @Test
+        @DisplayName("Given Try of Run. When Runnable success. Then Try returns Right of Unit.")
+        void TryRun_RunnableSuccess_ReturnsRight() {
+            var num = new AtomicInteger(1);
+            var result = Try.run(num::getAndIncrement).execute();
+
+            assertEquals(Either.right(Unit.INSTANCE), result);
+            assertEquals(2, num.get());
+        }
+
+        @Test
+        @DisplayName("Given Try of Run. When Runnable throws X. Then Try returns Left of Throws of X.")
+        void TryRun_RunnableThrows_ReturnsLeft() {
+            final var exception = new Exception();
+
+            var result = Try.run(() -> {
+                        throw exception;
+                    })
                     .execute();
 
             assertEquals(Either.left(new Thrown(exception)), result);
@@ -64,6 +132,35 @@ class TryTest {
                         throw exception;
                     })
                     .withParams(7, 8)
+                    .execute();
+
+            assertEquals(Either.left(new Thrown(exception)), result);
+        }
+
+        @Test
+        @DisplayName("Given Try of BiConsumer. When BiConsumer returns. Then Try returns Right of Unit.")
+        void TryConsumer_BiConsumerReturns_ReturnsRight() {
+            var num = new AtomicInteger(1);
+            var result = Try.consume((AtomicInteger i, AtomicInteger j) -> {
+                        i.incrementAndGet();
+                        j.incrementAndGet();
+                    })
+                    .withParams(num, num)
+                    .execute();
+
+            assertEquals(Either.right(Unit.INSTANCE), result);
+            assertEquals(3, num.get());
+        }
+
+        @Test
+        @DisplayName("Given Try of BiConsumer. When BiConsumer throws X. Then Try returns Left of Throws of X.")
+        void TryConsumer_BiConsumerThrows_ReturnsLeft() {
+            final var exception = new Exception();
+
+            var result = Try.consume((_, _) -> {
+                        throw exception;
+                    })
+                    .withParams(7, 7)
                     .execute();
 
             assertEquals(Either.left(new Thrown(exception)), result);

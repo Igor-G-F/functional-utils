@@ -6,13 +6,12 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TryWithResourcesTest {
-
-    //TODO :add tests for consumer and biconsumer
 
     private static final byte[] arr = "Hello World".getBytes();
 
@@ -66,6 +65,37 @@ class TryWithResourcesTest {
             assertEquals(Either.left(new Thrown(exception)), result);
             assertTrue(stream.closed);
         }
+
+        @Test
+        @DisplayName("Given Try of Consumer With Resource. When Consumer success. Then Try returns Right of Unit, and Resource closed.")
+        void TryConsumerWithResource_ConsumerReturns_ReturnsRightAndResourceClosed() {
+            final var stream = new CloseableInputStream(arr);
+            AtomicReference<Integer> val = new AtomicReference<>(0);
+
+            var result = TryWithResources.consume((CloseableInputStream s) -> val.set(s.read()))
+                    .withResource(() -> stream)
+                    .execute();
+
+            assertEquals(Either.right(Unit.INSTANCE), result);
+            assertEquals(72, val.get());
+            assertTrue(stream.closed);
+        }
+
+        @Test
+        @DisplayName("Given Try of Consumer With Resource. When Consumer throws X. Then Try returns Left of Throws of X, and Resource closed.")
+        void TryConsumerWithResource_ConsumerThrows_ReturnsLeftAndResourceClosed() {
+            final var stream = new CloseableInputStream(arr);
+            final var exception = new Exception();
+
+            var result = TryWithResources.consume(_ -> {
+                        throw exception;
+                    })
+                    .withResource(() -> stream)
+                    .execute();
+
+            assertEquals(Either.left(new Thrown(exception)), result);
+            assertTrue(stream.closed);
+        }
     }
 
     @SuppressWarnings("resource")
@@ -94,6 +124,42 @@ class TryWithResourcesTest {
             final var exception = new Exception();
 
             var result = TryWithResources.of((_, _) -> {
+                        throw exception;
+                    })
+                    .withResources(() -> stream, () -> stream2)
+                    .execute();
+
+            assertEquals(Either.left(new Thrown(exception)), result);
+            assertTrue(stream.closed);
+            assertTrue(stream2.closed);
+        }
+
+        @Test
+        @DisplayName("Given Try of BiConsume With Resources. When BiConsume success. Then Try returns Right of Unit, and Resources closed.")
+        void TryBiConsumeWithResources_BiConsumeSuccess_ReturnsRightAndResourcesClosed() {
+            final var stream = new CloseableInputStream(arr);
+            final var stream2 = new CloseableInputStream(arr);
+            AtomicReference<Integer> val = new AtomicReference<>(0);
+
+            var result = TryWithResources.consume((CloseableInputStream a, CloseableInputStream b) ->
+                            val.set(a.read() + b.read()))
+                    .withResources(() -> stream, () -> stream2)
+                    .execute();
+
+            assertEquals(Either.right(Unit.INSTANCE), result);
+            assertEquals(144, val.get());
+            assertTrue(stream.closed);
+            assertTrue(stream2.closed);
+        }
+
+        @Test
+        @DisplayName("Given Try of BiConsume With Resources. When BiConsume throws X. Then Try returns Left of Throws of X, and Resources closed.")
+        void TryBiConsumeWithResources_BiConsumeThrows_ReturnsLeftAndResourcesClosed() {
+            final var stream = new CloseableInputStream(arr);
+            final var stream2 = new CloseableInputStream(arr);
+            final var exception = new Exception();
+
+            var result = TryWithResources.consume((_, _) -> {
                         throw exception;
                     })
                     .withResources(() -> stream, () -> stream2)
