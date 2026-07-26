@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TryTest {
 
+    //TODO: add tests against null values
+
     @Nested
     class TryFunction {
 

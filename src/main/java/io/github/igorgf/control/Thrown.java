@@ -3,7 +3,6 @@ package io.github.igorgf.control;
 import io.github.igorgf.function.CheckedConsumer;
 
 import java.util.Objects;
-import java.util.function.Consumer;
 
 
 /**
@@ -21,33 +20,19 @@ import java.util.function.Consumer;
  *       {@link NullPointerException}.
  *   </li>
  *   <li>
- *       Is <b>fluent</b>: the inspection methods ({@link #handle},
- *       {@link #rethrow}, {@link #handleChecked}, {@link #rethrowChecked})
- *       return {@code this} when they do not throw, so reactions to distinct
- *       throwable types can be chained.
- *   </li>
- *   <li>
- *       Offers <b>checked and unchecked</b> reaction paths: the plain
- *       {@link #handle}/{@link #rethrow} operate through unchecked functional
- *       interfaces, while {@link #handleChecked}/{@link #rethrowChecked}
- *       preserve and propagate a declared checked exception type {@code X}.
+ *       Is <b>fluent</b>: the inspection methods:
+ *       {@link #handle(CheckedConsumer, Class[])},
+ *       {@link #handle(CheckedConsumer, Class)}, {@link #rethrow(Class[])}, and
+ *       {@link #rethrow(Class)}, return {@code this} when they do not throw, so
+ *       reactions to distinct throwable types can be chained.
  *   </li>
  * </ul>
- * <p>
- * <b>Type matching:</b><br>
- * All selective methods match the wrapped throwable by <em>assignability</em>
- * (subtype aware), exactly as a {@code catch} clause would: a filter of
- * {@code IOException.class} matches a wrapped
- * {@link java.io.FileNotFoundException}. The varargs methods additionally treat
- * an <b>empty</b> filter as &quot;match anything&quot;.
  * <p>
  * <b>Relationship to {@link Error}:</b><br>
  * A {@code Thrown} never wraps an {@link Error}. The canonical constructor
  * rejects one with an {@link IllegalArgumentException}, upholding the same
  * stance as {@link Try#execute()}, which rethrows {@link Error} rather than
- * capturing it: an {@link Error} is unrecoverable and must propagate. The
- * checked reaction methods are additionally bounded to {@link Exception} and so
- * cannot target an {@link Error} in any case.
+ * capturing it: an {@link Error} is unrecoverable and must propagate.
  *
  * @see Try
  * @see Either
@@ -55,9 +40,9 @@ import java.util.function.Consumer;
  * @author Igor Flakiewicz
  * @since 1.0.0
  *
- * @param thrown The captured throwable; never {@code null}; never {@link Error}.
+ * @param captured The captured throwable, never {@code null} or {@link Error}.
  */
-public record Thrown(Throwable thrown) {
+public record Thrown(Throwable captured) {
 
     /**
      * Rejects {@link Error}: a {@code Thrown} models a <em>recoverable</em>
@@ -67,29 +52,29 @@ public record Thrown(Throwable thrown) {
      * it, and guarantees that no {@code Thrown} anywhere ever wraps an
      * {@link Error}.
      *
-     * @param thrown the captured throwable; must not be an {@link Error}.
+     * @param captured the captured throwable; must not be an {@link Error}.
      *
      * @throws NullPointerException If {@code thrown} is {@code null}.
      * @throws IllegalArgumentException If {@code thrown} is an {@link Error}.
      */
     public Thrown {
-        Objects.requireNonNull(thrown);
-        if (thrown instanceof Error) {
+        Objects.requireNonNull(captured);
+        if (captured instanceof Error) {
             throw new IllegalArgumentException(
-                    "Thrown cannot wrap an Error; Errors are unrecoverable and "
-                            + "must propagate: " + thrown
+                    "Thrown cannot wrap an Error. Errors are unrecoverable and "
+                            + "must propagate: " + captured
             );
         }
     }
 
     /**
      * Returns the captured {@link Throwable}. Alias for the generated record
-     * accessor {@link #thrown()}.
+     * accessor {@link #captured()}.
      *
      * @return The wrapped throwable; never {@code null}.
      */
     public Throwable get() {
-        return this.thrown;
+        return this.captured;
     }
 
     /**
@@ -99,68 +84,108 @@ public record Thrown(Throwable thrown) {
      *         {@link RuntimeException}; {@code false} otherwise.
      */
     public boolean isRuntimeException() {
-        return this.thrown instanceof RuntimeException;
+        return this.captured instanceof RuntimeException;
     }
 
     /**
      * Reports whether the captured throwable is a checked exception, that is an
-     * {@link Exception} that is not a {@link RuntimeException}.
+     * {@link Throwable} that is not a {@link RuntimeException}.
+     * <p>
+     * This method never returns {@code true} for an {@link Error}, because
+     * {@code Thrown} rejects {@code Error} at construction time and can
+     * never wrap {@code Error}.
      *
      * @return {@code true} if the wrapped throwable is a checked exception;
      *         {@code false} otherwise.
      */
     public boolean isCheckedException() {
-        return this.thrown instanceof Exception
-                && !(this.thrown instanceof RuntimeException);
+        return !(this.captured instanceof RuntimeException);
     }
 
     /**
-     * Invokes {@code handler} with the captured throwable when it matches one
-     * of the given {@code throwables} types, then returns {@code this} for
-     * chaining.
+     * Invokes {@code handler} with the {@link #captured()} throwable when it
+     * matches one of the given {@code throwables} types, then returns
+     * {@code this} for chaining.
      * <p>
-     * Matching is by assignability: the handler fires if the wrapped throwable
-     * is an instance of any listed type. Passing <b>no</b> types matches every
-     * throwable. This method never throws a checked exception; use
-     * {@link #handleChecked(CheckedConsumer, Class)} for a handler that must
-     * declare one.
+     * Matching is by class type, the handler fires when {@link #captured()} is
+     * the same class as one of the {@code throwables}. Passing <b>no</b> types
+     * matches every throwable.
+     * <p>
+     * This uses a generic {@link Throwable} handler, to bind the handler to a
+     * concrete type use {@link #handle(CheckedConsumer, Class)}.
      *
-     * @param handler The action to run against the throwable on a match.
-     * @param throwables The throwable types to match; empty matches all.
+     * @param handler The action to run against the {@link #captured()} on a
+     *        match.
+     * @param throwables The throwable types to match, empty always matches.
      *
      * @return {@code this}, to allow chaining further reactions.
      *
+     * @throws X If the {@code handler} runs and throws it.
      * @throws NullPointerException If {@code handler}, the {@code throwables}
      *         array, or any element of it is {@code null}.
      */
     @SafeVarargs
-    public final Thrown handle(
-            Consumer<Throwable> handler,
+    public final <X extends Throwable> Thrown handle(
+            CheckedConsumer<Throwable, X> handler,
             Class<? extends Throwable>... throwables
-    ) {
+    ) throws X {
         Objects.requireNonNull(handler);
-        if (matches(throwables)) {
-            handler.accept(thrown);
+        Objects.requireNonNull(throwables);
+        if (throwables.length == 0 || matches(throwables)) {
+            handler.accept(captured);
         }
         return this;
     }
 
     /**
-     * Rethrows the captured throwable, wrapped as an unchecked exception, when
-     * it matches one of the given {@code throwables} types; otherwise returns
-     * {@code this} for chaining.
+     * Invokes {@code handler} with the {@link #captured()} throwable when it is
+     * a class of {@code exceptionType}, then returns {@code this} for chaining.
+     * <p>
+     * Unlike {@link #handle(CheckedConsumer, Class[])}, the {@code handler}
+     * is bound to a specific exception type {@code T}.
+     *
+     * @param <T> The throwable type the {@code handler} consumes.
+     * @param <X> The checked exception type the {@code handler} may throw.
+     * @param handler The action to run against the {@link #captured()} on a
+     *        match.
+     * @param exceptionType The type the wrapped throwable must be an instance
+     *        of.
+     *
+     * @return {@code this}, to allow chaining further reactions.
+     *
+     * @throws X If the {@code handler} runs and throws it.
+     * @throws NullPointerException If {@code handler} or {@code exceptionType}
+     *         is {@code null}.
+     */
+    public <T extends Throwable, X extends Throwable> Thrown handle(
+            CheckedConsumer<T, X> handler,
+            Class<T> exceptionType
+    ) throws X {
+        Objects.requireNonNull(handler);
+        Objects.requireNonNull(exceptionType);
+        if (exceptionType.equals(this.captured.getClass())) {
+            handler.accept(exceptionType.cast(this.captured));
+        }
+        return this;
+    }
+
+    /**
+     * Rethrows the {@link #captured()} throwable as an unchecked exception,
+     * when it matches one of the given {@code throwables} types, or when no
+     * arguments provided. Otherwise, returns {@code this} for chaining.
      * <p>
      * Matching is by assignability, and passing <b>no</b> types matches every
      * throwable. When the wrapped throwable is already a
-     * {@link RuntimeException} it is rethrown as is; otherwise it is wrapped
+     * {@link RuntimeException} it is rethrown as is. Otherwise, it is wrapped
      * in a {@link RuntimeException}, following {@link #getAsUnchecked()}.
      *
-     * @param throwables The throwable types to match; empty matches all.
+     * @param throwables The throwable types to match, empty matches all.
      *
-     * @return {@code this}, when the throwable does not match and is not thrown.
+     * @return {@code this}, when the throwable does not match or no types
+     *         passed.
      *
-     * @throws RuntimeException If the wrapped throwable matches; the original
-     *         if it is already unchecked, otherwise a wrapper around it.
+     * @throws RuntimeException If the wrapped {@link #captured()} matches, the
+     *         original if already unchecked, otherwise a wrapper around it.
      * @throws NullPointerException If the {@code throwables} array or any
      *         element of it is {@code null}.
      */
@@ -168,48 +193,16 @@ public record Thrown(Throwable thrown) {
     public final Thrown rethrow(
             Class<? extends Throwable>... throwables
     ) {
-        if (matches(throwables)) {
+        Objects.requireNonNull(throwables);
+        if (throwables.length == 0 || matches(throwables)) {
             throw getAsUnchecked();
         }
         return this;
     }
 
     /**
-     * Invokes {@code handler} with the captured throwable when it is an
-     * instance of {@code exceptionType}, then returns {@code this} for
-     * chaining.
-     * <p>
-     * Unlike {@link #handle(Consumer, Class[])}, the {@code handler} may
-     * declare a checked exception {@code X}, which propagates to the caller if
-     * the handler throws it.
-     *
-     * @param <T> The throwable type the handler consumes.
-     * @param <X> The checked exception type the handler may throw.
-     * @param handler The action to run against the throwable on a match.
-     * @param exceptionType The type the wrapped throwable must be an instance
-     *        of.
-     *
-     * @return {@code this}, to allow chaining further reactions.
-     *
-     * @throws X If the {@code handler} runs and throws it.
-     * @throws NullPointerException If {@code handler} or {@code throwableType}
-     *         is {@code null}.
-     */
-    public <T extends Exception, X extends Exception> Thrown handleChecked(
-            CheckedConsumer<T, X> handler,
-            Class<T> exceptionType
-    ) throws X {
-        Objects.requireNonNull(handler);
-        Objects.requireNonNull(exceptionType);
-        if (exceptionType.isInstance(this.thrown)) {
-            handler.accept(exceptionType.cast(this.thrown));
-        }
-        return this;
-    }
-
-    /**
      * Rethrows the captured throwable, preserving its original checked type,
-     * when it is an instance of {@code exceptionType}; otherwise returns
+     * when it is an instance of {@code throwable}; otherwise returns
      * {@code this} for chaining.
      * <p>
      * Unlike {@link #rethrow(Class[])}, the throwable is rethrown as is (cast
@@ -217,22 +210,22 @@ public record Thrown(Throwable thrown) {
      * propagates to the caller.
      *
      * @param <X> The checked exception type to match and rethrow.
-     * @param exceptionType The type the wrapped throwable must be an instance
+     * @param throwable The type the wrapped throwable must be an instance
      *        of.
      *
      * @return {@code this}, when the throwable does not match and is not
      *         thrown.
      *
      * @throws X If the wrapped throwable is an instance of
-     *         {@code exceptionType}.
-     * @throws NullPointerException If {@code exceptionType} is {@code null}.
+     *         {@code throwable}.
+     * @throws NullPointerException If {@code throwable} is {@code null}.
      */
-    public <X extends Exception> Thrown rethrowChecked(
-            Class<X> exceptionType
+    public <X extends Throwable> Thrown rethrow(
+            Class<X> throwable
     ) throws X {
-        Objects.requireNonNull(exceptionType);
-        if (exceptionType.isInstance(this.thrown)) {
-            throw exceptionType.cast(this.thrown);
+        Objects.requireNonNull(throwable);
+        if (throwable.equals(this.captured.getClass())) {
+            throw throwable.cast(this.captured);
         }
         return this;
     }
@@ -246,27 +239,15 @@ public record Thrown(Throwable thrown) {
      *         wrapping it as its cause.
      */
     public RuntimeException getAsUnchecked() {
-        return this.thrown instanceof RuntimeException runtime
+        return this.captured instanceof RuntimeException runtime
                 ? runtime
-                : new RuntimeException(this.thrown);
-    }
-
-    /**
-     * Rethrows the captured throwable as an unchecked exception, unconditionally.
-     *
-     * @throws RuntimeException Always; the original if the wrapped throwable is
-     *         already unchecked, otherwise a wrapper around it, per
-     *         {@link #getAsUnchecked()}.
-     */
-    public void rethrowUnchecked() {
-        throw getAsUnchecked();
+                : new RuntimeException(this.captured);
     }
 
     /**
      * Reports whether the wrapped throwable is an instance of the given types.
-     * An empty array matches unconditionally.
      *
-     * @param throwables The types to test against; empty matches all.
+     * @param throwables The types to test against.
      *
      * @return {@code true} if the wrapped throwable matches; {@code false}
      *         otherwise.
@@ -276,12 +257,9 @@ public record Thrown(Throwable thrown) {
     private boolean matches(
             Class<? extends Throwable>[] throwables
     ) {
-        if (throwables.length == 0) {
-            return true;
-        }
         for (Class<? extends Throwable> type : throwables) {
             Objects.requireNonNull(type);
-            if (type.isInstance(this.thrown)) {
+            if (type.equals(this.captured.getClass())) {
                 return true;
             }
         }
