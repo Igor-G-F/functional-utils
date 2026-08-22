@@ -4,6 +4,8 @@ import io.github.igorgf.function.CheckedConsumer;
 
 import java.util.Objects;
 
+import static io.github.igorgf.control.ControlUtils.requireNonNull;
+
 
 /**
  * An immutable container for a {@link Throwable} captured by a {@link Try}
@@ -16,8 +18,8 @@ import java.util.Objects;
  *   <li>
  *       Is <b>null safe</b>: a {@code Thrown} can never wrap a {@code null}
  *       {@link Throwable}, and every handler, supplier, and type argument
- *       passed to its methods is rejected when {@code null} with a
- *       {@link NullPointerException}.
+ *       passed to its methods is rejected when {@code null} with some
+ *       {@link ContractViolationException}.
  *   </li>
  *   <li>
  *       Is <b>fluent</b>: the inspection methods:
@@ -54,11 +56,11 @@ public record Thrown(Throwable captured) {
      *
      * @param captured the captured throwable; must not be an {@link Error}.
      *
-     * @throws NullPointerException If {@code thrown} is {@code null}.
+     * @throws NullArgumentException If {@code thrown} is {@code null}.
      * @throws IllegalArgumentException If {@code thrown} is an {@link Error}.
      */
     public Thrown {
-        Objects.requireNonNull(captured);
+        requireNonNull(captured, "captured");
         if (captured instanceof Error) {
             throw new IllegalArgumentException(
                     "Thrown cannot wrap an Error. Errors are unrecoverable and "
@@ -121,16 +123,16 @@ public record Thrown(Throwable captured) {
      * @return {@code this}, to allow chaining further reactions.
      *
      * @throws X If the {@code handler} runs and throws it.
-     * @throws NullPointerException If {@code handler}, the {@code throwables}
+     * @throws NullArgumentException If {@code handler}, the {@code throwables}
      *         array, or any element of it is {@code null}.
      */
     @SafeVarargs
     public final <X extends Throwable> Thrown handle(
             CheckedConsumer<Throwable, X> handler,
             Class<? extends Throwable>... throwables
-    ) throws X {
-        Objects.requireNonNull(handler);
-        Objects.requireNonNull(throwables);
+    ) throws X, NullArgumentException {
+        requireNonNull(handler, "handler");
+        requireNonNull(throwables, "throwables");
         if (throwables.length == 0 || matches(throwables)) {
             handler.accept(captured);
         }
@@ -154,15 +156,15 @@ public record Thrown(Throwable captured) {
      * @return {@code this}, to allow chaining further reactions.
      *
      * @throws X If the {@code handler} runs and throws it.
-     * @throws NullPointerException If {@code handler} or {@code exceptionType}
+     * @throws NullArgumentException If {@code handler} or {@code exceptionType}
      *         is {@code null}.
      */
     public <T extends Throwable, X extends Throwable> Thrown handle(
             CheckedConsumer<T, X> handler,
             Class<T> exceptionType
-    ) throws X {
-        Objects.requireNonNull(handler);
-        Objects.requireNonNull(exceptionType);
+    ) throws X, NullArgumentException {
+        requireNonNull(handler, "handler");
+        requireNonNull(exceptionType, "exceptionType");
         if (exceptionType.equals(this.captured.getClass())) {
             handler.accept(exceptionType.cast(this.captured));
         }
@@ -175,27 +177,23 @@ public record Thrown(Throwable captured) {
      * arguments provided. Otherwise, returns {@code this} for chaining.
      * <p>
      * Matching is by assignability, and passing <b>no</b> types matches every
-     * throwable. When the wrapped throwable is already a
-     * {@link RuntimeException} it is rethrown as is. Otherwise, it is wrapped
-     * in a {@link RuntimeException}, following {@link #getAsUnchecked()}.
+     * throwable.
      *
      * @param throwables The throwable types to match, empty matches all.
      *
      * @return {@code this}, when the throwable does not match or no types
      *         passed.
      *
-     * @throws RuntimeException If the wrapped {@link #captured()} matches, the
-     *         original if already unchecked, otherwise a wrapper around it.
-     * @throws NullPointerException If the {@code throwables} array or any
+     * @throws NullArgumentException If the {@code throwables} array or any
      *         element of it is {@code null}.
      */
     @SafeVarargs
     public final Thrown rethrow(
             Class<? extends Throwable>... throwables
-    ) {
-        Objects.requireNonNull(throwables);
+    ) throws NullArgumentException {
+        requireNonNull(throwables, "throwables");
         if (throwables.length == 0 || matches(throwables)) {
-            throw getAsUnchecked();
+            rethrowGeneric(this.captured);
         }
         return this;
     }
@@ -218,30 +216,21 @@ public record Thrown(Throwable captured) {
      *
      * @throws X If the wrapped throwable is an instance of
      *         {@code throwable}.
-     * @throws NullPointerException If {@code throwable} is {@code null}.
+     * @throws NullArgumentException If {@code throwable} is {@code null}.
      */
     public <X extends Throwable> Thrown rethrow(
             Class<X> throwable
-    ) throws X {
-        Objects.requireNonNull(throwable);
+    ) throws X, NullArgumentException {
+        requireNonNull(throwable, "throwable");
         if (throwable.equals(this.captured.getClass())) {
             throw throwable.cast(this.captured);
         }
         return this;
     }
 
-    /**
-     * Returns the captured throwable as an unchecked exception, without throwing
-     * it.
-     *
-     * @return The wrapped throwable itself if it is already a
-     *         {@link RuntimeException}, otherwise a new {@link RuntimeException}
-     *         wrapping it as its cause.
-     */
-    public RuntimeException getAsUnchecked() {
-        return this.captured instanceof RuntimeException runtime
-                ? runtime
-                : new RuntimeException(this.captured);
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowGeneric(Throwable t) throws T {
+        throw (T) t;
     }
 
     /**
@@ -252,16 +241,18 @@ public record Thrown(Throwable captured) {
      * @return {@code true} if the wrapped throwable matches; {@code false}
      *         otherwise.
      *
-     * @throws NullPointerException If the array or any element is {@code null}.
+     * @throws NullArgumentException If the array or any element is {@code null}.
      */
     private boolean matches(
             Class<? extends Throwable>[] throwables
     ) {
+        var i = 0;
         for (Class<? extends Throwable> type : throwables) {
-            Objects.requireNonNull(type);
+            requireNonNull(type, "throwables[" + i + "]" );
             if (type.equals(this.captured.getClass())) {
                 return true;
             }
+            ++i;
         }
         return false;
     }

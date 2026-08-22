@@ -387,24 +387,4 @@ class ThrownTest {
                     new IOException(), IOException.class)
     );
 
-    @DisplayName("Given GetAsUnchecked.")
-    @ParameterizedTest(name = "When captured is {0}. {argumentSetName}")
-    @FieldSource("GetAsUnchecked_Args")
-    void GetAsUnchecked(Throwable captured) {
-        var thrown = new Thrown(captured);
-
-        //noinspection ThrowableNotThrown
-        switch (thrown.getAsUnchecked()) {
-            case RuntimeException e when e.getCause() != null -> assertEquals(captured, e.getCause());
-            case RuntimeException e -> assertEquals(captured, e);
-        }
-    }
-
-    private static final List<Arguments> GetAsUnchecked_Args = List.of(
-            argumentSet("Then returns RuntimeException with cause Exception.", new Exception()),
-            argumentSet("Then returns captured.", new RuntimeException()),
-            argumentSet("Then returns RuntimeException with cause Throwable.", new Throwable()),
-            argumentSet("Then returns RuntimeException with cause IOException.",new IOException()),
-            argumentSet("Then returns captured.", new IllegalArgumentException())
-    );
 }

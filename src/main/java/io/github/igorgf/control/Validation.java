@@ -6,9 +6,10 @@ import io.github.igorgf.function.CheckedSupplier;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
+
+import static io.github.igorgf.control.ControlUtils.*;
 
 /**
  * A disjoint union (sum type) representing one of three distinct states:
@@ -31,8 +32,8 @@ import java.util.function.Predicate;
  *       Is <b>null safe</b>: {@link Valid} or {@link Invalid} can never contain
  *       a null value, {@code Validation} does not expose any null value entry
  *       or exit. The entire API rejects {@code null} at every boundary:
- *       constructors, mapping functions, and suppliers all throw
- *       {@link NullPointerException} on {@code null}.
+ *       constructors, mapping functions, and suppliers all throw appropriate
+ *       {@link ContractViolationException}s on {@code null}.
  *   </li>
  *   <li>
  *       An <b>applicative functor</b>: {@link #combine(Validation)} joins
@@ -58,7 +59,7 @@ import java.util.function.Predicate;
  * <b>Exception Handling:</b><br>
  * Methods accepting a {@link CheckedFunction} or {@link CheckedSupplier}
  * propagate checked exceptions transparently through a generic
- * {@code X extends Exception} parameter. The compiler will only require
+ * {@code X extends Throwable} parameter. The compiler will only require
  * handling if checked exceptions are explicitly declared or thrown in the
  * lambda body. Unchecked exceptions ({@link RuntimeException}) propagate
  * normally and require no declaration. Example of checked exception handling:
@@ -108,9 +109,11 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @return A new {@code Valid<E, T>} instance.
      *
-     * @throws NullPointerException If {@code value} is {@code null}.
+     * @throws NullArgumentException If {@code value} is {@code null}.
      */
-    static <E, T> Validation<E, T> valid(T target) { return new Valid<>(target); }
+    static <E, T> Validation<E, T> valid(T target) throws NullArgumentException { 
+        return new Valid<>(target); 
+    }
 
     /**
      * Factory method for creating a new {@code Accumulated<E, T>} instance.
@@ -124,10 +127,10 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @return A new {@code Accumulated<E, T>} instance.
      *
-     * @throws NullPointerException If {@code error} is {@code null}.
+     * @throws NullArgumentException If {@code error} is {@code null}.
      */
-    static <E, T> Validation<E, T> accumulated(E error) {
-        Objects.requireNonNull(error);
+    static <E, T> Validation<E, T> accumulated(E error) throws NullArgumentException {
+        requireNonNull(error, "error");
         return new Accumulated<>(List.of(error));
     }
 
@@ -135,7 +138,7 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      * Factory method for creating a new {@code Accumulated<E, T>} instance.
      * Containing the validation errors {@code List<E>}.
      * <p>
-     * {@link EmptyValueException} is thrown when the provided {@code errors} is
+     * {@link EmptyArgumentException} is thrown when the provided {@code errors} is
      * empty. A {@link Accumulated#errors()} can never contain null or empty values.
      * A checked exception is an intentional design choice to force the user
      * handle empty cases at call point.
@@ -148,16 +151,11 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @return A new {@code Accumulated<E, T>} instance.
      *
-     * @throws EmptyValueException If {@code errors} is empty.
-     * @throws NullPointerException If {@code errors} is {@code null}.
+     * @throws EmptyArgumentException If {@code errors} is empty.
+     * @throws NullArgumentException If {@code errors} is {@code null}.
      */
-    static <E, T> Validation<E, T> accumulated(List<E> errors) throws EmptyValueException {
-        Objects.requireNonNull(errors);
-        try {
-            return new Accumulated<>(List.copyOf(errors));
-        } catch (IllegalArgumentException _) {
-            throw new EmptyValueException("errors cannot be empty");
-        }
+    static <E, T> Validation<E, T> accumulated(List<E> errors) throws NullArgumentException, EmptyArgumentException {
+        return new Accumulated<>(errors);
     }
 
     /**
@@ -175,9 +173,9 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @return A new {@code Critical<E, T>} instance.
      *
-     * @throws NullPointerException If {@code error} is {@code null}.
+     * @throws NullArgumentException If {@code error} is {@code null}.
      */
-    static <E, T> Validation<E, T> critical(E error) {
+    static <E, T> Validation<E, T> critical(E error) throws NullArgumentException {
         return new Critical<>(error);
     }
 
@@ -207,21 +205,25 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *         {@code Critical<E, T>}, containing result of {@code errorMapper},
      *         when {@code predicate} returns {@code false} and {@code critical}
      *         is {@code true}.
+     *         
+     * @throws NullArgumentException If any of the supplied method arguments are
+     *         a {@code null}.
      */
     static <E, T> Validation<E, T> validate(
             T value,
             Predicate<? super T> predicate,
             Function<? super T, ? extends E> errorMapper,
             boolean critical
-    ) {
-        Objects.requireNonNull(value);
-        Objects.requireNonNull(predicate);
+    ) throws NullArgumentException {
+        requireNonNull(value, "value");
+        requireNonNull(predicate, "predicate");
         if (predicate.test(value)) {
             return valid(value);
         }
 
-        Objects.requireNonNull(errorMapper);
+        requireNonNull(errorMapper, "errorMapper");
         var error = errorMapper.apply(value);
+        requireNonNull(critical, "critical");
         return critical ? critical(error) : accumulated(error);
     }
 
@@ -247,6 +249,9 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *         {@code Accumulated<E, T>}, containing result of
      *         {@code errorMapper}, when {@code predicate} returns
      *         {@code false}.
+     *
+     * @throws NullArgumentException If any of the supplied method arguments are
+     *         a {@code null}.
      */
     static <E, T> Validation<E, T> validate(
             T value,
@@ -320,13 +325,14 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @throws X If the {@code combiner} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code other} is {@code null}. Or,
-     *         {@code combiner} is {@code null} or returns {@code null}.
+     * @throws NullArgumentException If {@code other} or {@code combiner} is a 
+     *         {@code null}.
+     * @throws NullResultException If {@code combiner} returns a {@code null}.
      */
-    <S, U, X extends Exception> Validation<E, U> combine(
+    <S, U, X extends Throwable> Validation<E, U> combine(
             Validation<E, S> other,
             CheckedBiFunction<? super T, ? super S, ? extends U, ? extends X> combiner
-    ) throws X;
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * The <b>applicative functor</b> operation of {@link Validation}. Similar
@@ -346,11 +352,11 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      * @return {@code Valid<E, T>}, {@code Accumulated<E, T>}, or
      *         {@code Critical<E, T>}. See description above for details.
      *
-     * @throws NullPointerException If {@code other} is {@code null}.
+     * @throws NullArgumentException If {@code other} is {@code null}.
      */
     <S> Validation<E, T> combine(
             Validation<E, S> other
-    );
+    ) throws  NullArgumentException;
 
     /**
      * The <b>monad (right biased)</b> operation of {@link Validation}.
@@ -378,12 +384,12 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @throws X If the {@code validator} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code validator} is {@code null} or
-     *         returns {@code null}.
+     * @throws NullArgumentException If {@code validator} is a {@code null}. 
+     * @throws NullResultException If {@code validator} returns a {@code null}. 
      */
-    <S, X extends Exception> Validation<E, S> then(
+    <S, X extends Throwable> Validation<E, S> then(
             CheckedFunction<? super T, ? extends Validation<E, S>, ? extends X> validator
-    ) throws X;
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * Allows item by item conversion of any contained errors from type
@@ -415,12 +421,12 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @throws X If the {@code errorMapper} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code errorMapper} is {@code null} or
-     *         returns a {@code null}.
+     * @throws NullArgumentException If {@code errorMapper} is a {@code null}. 
+     * @throws NullResultException If {@code errorMapper} returns a {@code null}. 
      */
-    <U, X extends Exception> Validation<U, T> mapError(
+    <U, X extends Throwable> Validation<U, T> mapError(
             CheckedFunction<? super E, ? extends U, ? extends X> errorMapper
-    ) throws X;
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * Allows collapsing contained errors into a new type {@code U}, when
@@ -450,12 +456,12 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @throws X If the {@code errorMapper} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code errorMapper} is {@code null} or
-     *         returns a {@code null}.
+     * @throws NullArgumentException If {@code errorMapper} is a {@code null}. 
+     * @throws NullResultException If {@code errorMapper} returns a {@code null}. 
      */
-    <U, X extends Exception> Validation<U, T> foldErrors(
+    <U, X extends Throwable> Validation<U, T> foldErrors(
             CheckedFunction<? super List<E>, ? extends U, ? extends X> errorMapper
-    ) throws X;
+    ) throws X,  NullArgumentException, NullResultException;
 
     /**
      * The <b>functor (right biased)</b> operation of {@link Validation}. Allows
@@ -485,12 +491,12 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @throws X If the {@code mapper} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code mapper} is {@code null} or
-     *         returns a {@code null}.
+     * @throws NullArgumentException If {@code mapper} is a {@code null}. 
+     * @throws NullResultException If {@code mapper} returns a {@code null}. 
      */
-    <S, X extends Exception> Validation<E, S> mapTarget(
+    <S, X extends Throwable> Validation<E, S> mapTarget(
             CheckedFunction<? super T, ? extends S, ? extends X> mapper
-    ) throws X;
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * Allows setting a new target {@code S}, when {@code this} is a
@@ -516,12 +522,12 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @throws X If the {@code targetSupplier} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code targetSupplier} is {@code null} or
-     *         returns a {@code null}.
+     * @throws NullArgumentException If {@code targetSupplier} is a {@code null}.
+     * @throws NullResultException If {@code targetSupplier} returns a {@code null}.
      */
-    <S, X extends Exception> Validation<E, S> newTarget(
+    <S, X extends Throwable> Validation<E, S> newTarget(
             CheckedSupplier<? extends S, ? extends X> targetSupplier
-    ) throws X;
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * Allows recovery when {@code this} is some {@link Invalid}. Useful for
@@ -546,12 +552,12 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @throws X If the {@code mapper} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code mapper} is {@code null} or returns
-     *         a {@code null}.
+     * @throws NullArgumentException If {@code mapper} is a {@code null}.
+     * @throws NullResultException If {@code mapper} returns a {@code null}.
      */
-    <X extends Exception> Validation<E, T> recover(
+    <X extends Throwable> Validation<E, T> recover(
             CheckedFunction<? super List<E>, ? extends Validation<E, T>, ? extends X> mapper
-    ) throws X;
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * Is {@code this} a {@link Valid}.
@@ -671,7 +677,7 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
 record Valid<E, T>(T target) implements Validation<E, T> {
 
     Valid {
-        Objects.requireNonNull(target);
+        requireNonNull(target, "target");
     }
 
     /**
@@ -682,19 +688,21 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      * does not contain any value {@code S}, it only contains errors {@code E}.
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @SuppressWarnings("unchecked")
     @Override
-    public <S, U, X extends Exception> Validation<E, U> combine(
+    public <S, U, X extends Throwable> Validation<E, U> combine(
             Validation<E, S> other,
             CheckedBiFunction<? super T, ? super S, ? extends U, ? extends X> combiner
-    ) throws X {
-        Objects.requireNonNull(other);
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(other, "other");
         return switch (other) {
             case Valid<E, S>(var otherValue) -> {
-                Objects.requireNonNull(combiner);
-                yield new Valid<>(combiner.apply(this.target, otherValue));
+                requireNonNull(combiner, "combiner");
+                var result = requireNonNullResult(combiner, this.target, otherValue);
+                yield new Valid<>(result);
             }
             case Invalid<E, S> e -> (Validation<E, U>) e;
         };
@@ -707,14 +715,14 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      * {@code Validation<E, T>} is provably safe because the {@code Invalid}
      * does not contain any value {@code S}, it only contains errors {@code E}.
      *
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
      */
     @SuppressWarnings("unchecked")
     @Override
     public <S> Validation<E, T> combine(
             Validation<E, S> other
-    ) {
-        Objects.requireNonNull(other);
+    ) throws NullArgumentException {
+        requireNonNull(other, "other");
         return switch (other) {
             case Valid<E, S>(_) -> this;
             case Invalid<E, S> e -> (Validation<E, T>) e;
@@ -727,14 +735,15 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      * @return {@code Validation<E, S>} produced by {@code validator}.
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    public <S, X extends Exception> Validation<E, S> then(
+    public <S, X extends Throwable> Validation<E, S> then(
             CheckedFunction<? super T, ? extends Validation<E, S>, ? extends X> validator
-    ) throws X {
-        Objects.requireNonNull(validator);
-        return Objects.requireNonNull(validator.apply(this.target));
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(validator, "validator");
+        return requireNonNullResult(validator, target);
     }
 
     /**
@@ -748,7 +757,7 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      */
     @SuppressWarnings("unchecked")
     @Override
-    public <U, X extends Exception> Validation<U, T> mapError(
+    public <U, X extends Throwable> Validation<U, T> mapError(
             CheckedFunction<? super E, ? extends U, ? extends X> errorMapper
     ) {
         return (Validation<U, T>) this;
@@ -765,7 +774,7 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      */
     @SuppressWarnings("unchecked")
     @Override
-    public <U, X extends Exception> Validation<U, T> foldErrors(
+    public <U, X extends Throwable> Validation<U, T> foldErrors(
             CheckedFunction<? super List<E>, ? extends U, ? extends X> errorMapper
     ) {
         return (Validation<U, T>) this;
@@ -777,14 +786,16 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      * @return {@code Valid<E, S>} containing the new target {@code S}
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    public <S, X extends Exception> Validation<E, S> mapTarget(
+    public <S, X extends Throwable> Validation<E, S> mapTarget(
             CheckedFunction<? super T, ? extends S, ? extends X> mapper
     ) throws X {
-        Objects.requireNonNull(mapper);
-        return new Valid<>(Objects.requireNonNull(mapper.apply(this.target)));
+        requireNonNull(mapper,  "mapper");
+        var result = requireNonNullResult(mapper, target);
+        return new Valid<>(result);
     }
 
     /**
@@ -793,14 +804,16 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      * @return {@code Valid<E, S>} containing the new target {@code S}
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    public <S, X extends Exception> Validation<E, S> newTarget(
+    public <S, X extends Throwable> Validation<E, S> newTarget(
             CheckedSupplier<? extends S, ? extends X> targetSupplier
     ) throws X {
-        Objects.requireNonNull(targetSupplier);
-        return new Valid<>(Objects.requireNonNull(targetSupplier.get()));
+        requireNonNull(targetSupplier, "targetSupplier");
+        var result = requireNonNullResult(targetSupplier, "targetSupplier");
+        return new Valid<>(result);
     }
 
     /**
@@ -809,7 +822,7 @@ record Valid<E, T>(T target) implements Validation<E, T> {
      * @return {@code this}
      */
     @Override
-    public <X extends Exception> Validation<E, T> recover(
+    public <X extends Throwable> Validation<E, T> recover(
             CheckedFunction<? super List<E>, ? extends Validation<E, T>, ? extends X> mapper
     ) {
         return this;
@@ -917,14 +930,16 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
      *         {@link Valid}. <br>
      *         Result of {@link #combineInvalid(Invalid)} when {@code other} is
      *         some {@link Invalid}.
+     *
+     * @throws NullArgumentException {@inheritDoc}
      */
     @SuppressWarnings("unchecked")
     @Override
-    default <S, U, X extends Exception> Validation<E, U> combine(
+    default <S, U, X extends Throwable> Validation<E, U> combine(
             Validation<E, S> other,
             CheckedBiFunction<? super T, ? super S, ? extends U, ? extends X> combiner
-    ) {
-        Objects.requireNonNull(other);
+    ) throws NullArgumentException {
+        requireNonNull(other, "other");
         return switch (other) {
             case Valid<E, S>(_) -> (Validation<E, U>) this;
             case Invalid<E, S> e -> this.combineInvalid(e);
@@ -941,12 +956,14 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
      * @return {@code this} when {@code other} is a {@link Valid}. <br>
      *         Result of {@link #combineInvalid(Invalid)} when {@code other} is
      *         some {@link Invalid}.
+     *
+     * @throws NullArgumentException {@inheritDoc}
      */
     @Override
     default <S> Validation<E, T> combine(
             Validation<E, S> other
-    ) {
-        Objects.requireNonNull(other);
+    ) throws NullArgumentException {
+        requireNonNull(other, "other");
         return switch (other) {
             case Valid<E, S>(_) -> this;
             case Invalid<E, S> e -> this.combineInvalid(e);
@@ -990,7 +1007,7 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
      *
      * @return {@code Invalid<E, U>} based on scenarios outlined above.
      *
-     * @throws NullPointerException If {@code other} is {@code null}.
+     * @throws NullArgumentException If {@code other} is {@code null}.
      */
     <S, U> Invalid<E, U> combineInvalid(Invalid<E, S> other);
 
@@ -1006,7 +1023,7 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
      */
     @SuppressWarnings("unchecked")
     @Override
-    default <S, X extends Exception> Validation<E, S> then(
+    default <S, X extends Throwable> Validation<E, S> then(
             CheckedFunction<? super T, ? extends Validation<E, S>, ? extends X> validator
     ) {
         return (Validation<E, S>) this;
@@ -1024,7 +1041,7 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
      */
     @SuppressWarnings("unchecked")
     @Override
-    default <S, X extends Exception> Validation<E, S> mapTarget(
+    default <S, X extends Throwable> Validation<E, S> mapTarget(
             CheckedFunction<? super T, ? extends S, ? extends X> mapper
     ) {
         return (Validation<E, S>) this;
@@ -1042,7 +1059,7 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
      */
     @SuppressWarnings("unchecked")
     @Override
-    default <S, X extends Exception> Validation<E, S> newTarget(
+    default <S, X extends Throwable> Validation<E, S> newTarget(
             CheckedSupplier<? extends S, ? extends X> targetSupplier
     ) {
         return (Validation<E, S>) this;
@@ -1054,14 +1071,15 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
      * @return {@code mapper} result.
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    default <X extends Exception> Validation<E, T> recover(
+    default <X extends Throwable> Validation<E, T> recover(
             CheckedFunction<? super List<E>, ? extends Validation<E, T>, ? extends X> mapper
-    ) throws X {
-        Objects.requireNonNull(mapper);
-        return Objects.requireNonNull(mapper.apply(getErrors()));
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(mapper, "mapper");
+        return requireNonNullResult(mapper, getErrors());
     }
 
     /**
@@ -1131,7 +1149,7 @@ sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Cri
 record Critical<E, T>(E error) implements Invalid<E, T> {
 
     Critical {
-        Objects.requireNonNull(error);
+        requireNonNull(error, "error");
     }
 
     /**
@@ -1156,14 +1174,16 @@ record Critical<E, T>(E error) implements Invalid<E, T> {
      * {@code errorMapper}.
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    public <U, X extends Exception> Validation<U, T> mapError(
+    public <U, X extends Throwable> Validation<U, T> mapError(
             CheckedFunction<? super E, ? extends U, ? extends X> errorMapper
-    ) throws X {
-        Objects.requireNonNull(errorMapper);
-        return new Critical<>(Objects.requireNonNull(errorMapper.apply(error)));
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(errorMapper,  "errorMapper");
+        var result = requireNonNullResult(errorMapper, error);
+        return new Critical<>(result);
     }
 
     /**
@@ -1173,14 +1193,16 @@ record Critical<E, T>(E error) implements Invalid<E, T> {
      * {@code errorMapper}.
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    public <U, X extends Exception> Validation<U, T> foldErrors(
+    public <U, X extends Throwable> Validation<U, T> foldErrors(
             CheckedFunction<? super List<E>, ? extends U, ? extends X> errorMapper
-    ) throws X {
-        Objects.requireNonNull(errorMapper);
-        return new Critical<>(Objects.requireNonNull(errorMapper.apply(getErrors())));
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(errorMapper,  "errorMapper");
+        var result = requireNonNullResult(errorMapper, getErrors());
+        return new Critical<>(result);
     }
 
     /**
@@ -1236,10 +1258,7 @@ record Critical<E, T>(E error) implements Invalid<E, T> {
 record Accumulated<E, T>(List<E> errors) implements Invalid<E, T> {
 
     Accumulated {
-        Objects.requireNonNull(errors);
-        if (errors.isEmpty()) {
-            throw new IllegalArgumentException("Accumulated errors cannot be empty");
-        }
+        requireNonEmpty(errors, "errors");
         errors = List.copyOf(errors);
     }
 
@@ -1249,10 +1268,13 @@ record Accumulated<E, T>(List<E> errors) implements Invalid<E, T> {
      * The unchecked cast from {@code other} to {@code Invalid<E, U>} is
      * provably safe because a {@code Critical} does not contain any value
      * {@code S}, it only contains error {@code E}.
+     *
+     * @throws NullArgumentException {@inheritDoc}
      */
     @SuppressWarnings("unchecked")
     @Override
-    public <S, U> Invalid<E, U> combineInvalid(Invalid<E, S> other) {
+    public <S, U> Invalid<E, U> combineInvalid(Invalid<E, S> other) throws NullArgumentException {
+        requireNonNull(other, "other");
         return switch (other) {
             case Critical<E, S> c -> (Invalid<E, U>) c;
             case Accumulated<E, S>(var e) -> {
@@ -1271,16 +1293,18 @@ record Accumulated<E, T>(List<E> errors) implements Invalid<E, T> {
      * {@code errorMapper} applied to each {@link #errors} element.
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    public <U, X extends Exception> Validation<U, T> mapError(
+    public <U, X extends Throwable> Validation<U, T> mapError(
             CheckedFunction<? super E, ? extends U, ? extends X> errorMapper
-    ) throws X {
-        Objects.requireNonNull(errorMapper);
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(errorMapper, "errorMapper");
         List<U> mapped = new ArrayList<>(this.errors.size());
         for (E error : this.errors) {
-            mapped.add(Objects.requireNonNull(errorMapper.apply(error)));
+            var result = requireNonNullResult(errorMapper, error);
+            mapped.add(result);
         }
         return new Accumulated<>(mapped);
     }
@@ -1292,16 +1316,16 @@ record Accumulated<E, T>(List<E> errors) implements Invalid<E, T> {
      * {@code errorMapper}.
      *
      * @throws X {@inheritDoc}
-     * @throws NullPointerException {@inheritDoc}
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
-    public <U, X extends Exception> Validation<U, T> foldErrors(
+    public <U, X extends Throwable> Validation<U, T> foldErrors(
             CheckedFunction<? super List<E>, ? extends U, ? extends X> errorMapper
     ) throws X {
-        Objects.requireNonNull(errorMapper);
-        return new Accumulated<>(List.of(
-                Objects.requireNonNull(errorMapper.apply(this.errors))
-        ));
+        requireNonNull(errorMapper, "errorMapper");
+        var result = requireNonNullResult(errorMapper, this.errors);
+        return new Accumulated<>(List.of(result));
     }
 
     /**

@@ -24,18 +24,17 @@
  * </ul>
  * <p>
  * <b>Null policy:</b> All methods in this package reject {@code null} arguments
- * by throwing {@link java.lang.NullPointerException}. This is a precondition
- * violation (a bug in the caller), not a domain result, and is therefore not
- * represented in the return type. The functional types in this package are
- * null safe by construction, once a value is wrapped in the above listed types
- * it is guaranteed non-null.
+ * and results by throwing some
+ * {@link io.github.igorgf.control.ContractViolationException}. This
+ * is a precondition violation (a bug in the caller), not a domain result, and
+ * is therefore not represented in the return type. The functional types in this
+ * package are null safe by construction and result, once a value is wrapped in
+ * the above listed types it is guaranteed non-null. Also, the resutls of any
+ * computations performed by these types are guaranteed non-null.
  * <p>
- * <b>Exception policy:</b> Checked exceptions are used for precondition
- * violations (e.g. {@code Validation.accumulated(List.of())} throws
- * {@link io.github.igorgf.control.EmptyValueException}). Also, members of this
- * package use the checked function aware functional interfaces from
- * {@link io.github.igorgf.function}, to ensure checked exception propagation
- * support.
+ * <b>Exception policy:</b> Members of this package use the checked function
+ * aware functional interfaces from {@link io.github.igorgf.function}, to ensure
+ * checked exception propagation support.
  * </p>
  *
  * @author Igor Flakiewicz
