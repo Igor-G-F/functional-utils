@@ -42,7 +42,7 @@ public record TryBiValue<T, U, R>(
      *         {@code arg1Supplier}, or {@code function} return a {@code null}.
      */
     @Override
-    public Either<Thrown, R> execute() throws Error, NullResultException {
+    public Either<Thrown<Throwable>, R> execute() throws Error, NullResultException {
         try {
             var arg = requireNonNullResult(arg0Supplier, "arg0Supplier");
             var arg2 = requireNonNullResult(arg1Supplier, "arg1Supplier");
@@ -51,7 +51,7 @@ public record TryBiValue<T, U, R>(
         } catch (Error | ContractViolationException x) {
             throw x;
         } catch (Throwable x) {
-            return Either.left(new Thrown(x));
+            return Either.left(Thrown.of(x));
         }
     }
 

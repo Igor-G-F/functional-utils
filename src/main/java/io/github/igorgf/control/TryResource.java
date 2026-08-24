@@ -43,7 +43,7 @@ public record TryResource<T extends AutoCloseable, R>(
      *         return a {@code null}.
      */
     @Override
-    public Either<Thrown, R> execute() throws NullResultException {
+    public Either<Thrown<Throwable>, R> execute() throws NullResultException {
         try (
                 T res = requireNonNullResult(resSupplier, "resSupplier")
         ) {
@@ -52,7 +52,7 @@ public record TryResource<T extends AutoCloseable, R>(
         } catch (Error | ContractViolationException x) {
             throw x;
         } catch (Throwable x) {
-            return Either.left(new Thrown(x));
+            return Either.left(Thrown.of(x));
         }
     }
 

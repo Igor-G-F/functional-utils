@@ -48,38 +48,13 @@ import static io.github.igorgf.control.ControlUtils.*;
  *       A <b>functor (right biased)</b>: {@link #mapTarget(CheckedFunction)}
  *       transforms the contained target when this is {@link Valid}.
  *   </li>
+ *   <li>
+ *       Is <b>exception fluent:</b> Operations use the checked function aware
+ *       functional interfaces from {@link io.github.igorgf.function}, to ensure
+ *       checked exception propagation support.
+ *   </li>
  * </ul>
  * <p>
- * <b>Note:</b><br>
- * {@link Accumulated} and {@link Critical} are subtypes of {@link Invalid},
- * therefore {@code Validation} can be reasoned with as a {@code Valid} XOR
- * {@code Invalid}. However, the two {@link Invalid} subtypes behave
- * differently, see {@link Invalid#combineInvalid(Invalid)}.
- * <p>
- * <b>Exception Handling:</b><br>
- * Methods accepting a {@link CheckedFunction} or {@link CheckedSupplier}
- * propagate checked exceptions transparently through a generic
- * {@code X extends Throwable} parameter. The compiler will only require
- * handling if checked exceptions are explicitly declared or thrown in the
- * lambda body. Unchecked exceptions ({@link RuntimeException}) propagate
- * normally and require no declaration. Example of checked exception handling:
- * <pre>{@code
- *     try {
- *         Validation.valid(7).then(n -> {
- *             if (n < 10) throw new Exception();
- *             return Validation.valid(n);
- *         });
- *     } catch (Exception e) {
- *         // e has to be handled as it propagated from then
- *     }
- * }</pre>
- * While throwing unchecked exceptions does not require explicit handling:
- * <pre>{@code
- *     Validation.valid(7).then(n -> {
- *         if (n < 10) throw new RuntimeException();
- *         return Validation.valid(n);
- *     });
- * }</pre>
  * <b>Alternative Types:</b><br>
  * For sequential, non-accumulative error handling, use {@link Either}. <br>
  * For single value presence or absence handling, use {@link Option}.
@@ -88,6 +63,7 @@ import static io.github.igorgf.control.ControlUtils.*;
  * @see Invalid
  * @see Accumulated
  * @see Critical
+ * @see io.github.igorgf.function
  *
  * @author Igor Flakiewicz
  * @since 1.0.0

@@ -62,7 +62,7 @@ class TryNoArgTest {
 
         var result = testTry.execute();
 
-        assertEquals(Either.left(new Thrown(exception)), result);
+        assertEquals(Either.left(Thrown.of(exception)), result);
     }
 
     @Test

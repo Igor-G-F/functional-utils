@@ -44,7 +44,7 @@ import static io.github.igorgf.control.ControlUtils.requireNonNull;
  * that always runs. Finally, {@link #execute()} runs everything and collapses
  * the outcome into a {@link Either}:
  * <pre>{@code
- *     Either<Thrown, Integer> result = Try
+ *     Either<Thrown<Throwable>, Integer> result = Try
  *             .of((String s) -> Integer.parseInt(s))
  *             .withArg("42")
  *             .withFinally(() -> log.info("parse attempted"))
@@ -75,7 +75,7 @@ public sealed interface Try<R> permits Try.TryArg, Try.TryBiArg, TryNoArg, Try.T
      * @see Thrown
      *
      * @return A {@code Right<R>} on normal completion. Otherwise, a
-     *         {@code Left<Thrown>} capturing the thrown {@link Throwable}.
+     *         {@code Left<Thrown<Throwable>>} capturing the thrown {@link Throwable}.
      *
      * @throws Error If the computation throws an {@link Error}, it is rethrown
      *         rather than captured.
@@ -83,7 +83,7 @@ public sealed interface Try<R> permits Try.TryArg, Try.TryBiArg, TryNoArg, Try.T
      *         {@link ContractViolationException}, it is rethrown rather than
      *         captured.
      */
-    Either<Thrown, R> execute() throws Error, ContractViolationException;
+    Either<Thrown<Throwable>, R> execute() throws Error, ContractViolationException;
 
     /**
      * Produces a {@link TryWithFinally} that wraps {@code this} as a
@@ -481,35 +481,35 @@ public sealed interface Try<R> permits Try.TryArg, Try.TryBiArg, TryNoArg, Try.T
          * @see Try#execute()
          *
          * @return A {@code Right<R>} on normal completion. Otherwise, a
-         *         {@code Left<Thrown>} capturing the thrown {@link Throwable}.
+         *         {@code Left<Thrown<Throwable>>} capturing the thrown {@link Throwable}.
          * @throws ContractViolationException If the delegate execution throws
          *         some {@link ContractViolationException}, it is rethrown
          *         rather than captured.
          */
         @Override
-        default Either<Thrown, R> execute() throws ContractViolationException {
-            Either<Thrown, R> result;
+        default Either<Thrown<Throwable>, R> execute() throws ContractViolationException {
+            Either<Thrown<Throwable>, R> result;
             try {
                 result = delegate().execute();
             } catch (Error e) {
                 throw e;
             } catch (Throwable e) {
-                result = Either.left(new Thrown(e));
+                result = Either.left(Thrown.of(e));
             }
 
             return switch (result) {
-                case Right<Thrown, R>(var funcResult) -> {
+                case Right<Thrown<Throwable>, R>(var funcResult) -> {
                     try {
                         finallyAction().run();
                     } catch (Error xFinally) {
                         throw xFinally;
                     } catch (Throwable xFinally) {
-                        yield Either.left(new Thrown(xFinally));
+                        yield Either.left(Thrown.of(xFinally));
                     }
 
                     yield Either.right(funcResult);
                 }
-                case Left<Thrown, R>(Thrown(ContractViolationException xFunc)) -> {
+                case Left<Thrown<Throwable>, R>(Thrown(ContractViolationException xFunc)) -> {
                     try {
                         finallyAction().run();
                     } catch (Error xFinally) {
@@ -522,7 +522,7 @@ public sealed interface Try<R> permits Try.TryArg, Try.TryBiArg, TryNoArg, Try.T
 
                     throw xFunc;
                 }
-                case Left<Thrown, R>(Thrown(var xFunc)) -> {
+                case Left<Thrown<Throwable>, R>(Thrown(var xFunc)) -> {
                     try {
                         finallyAction().run();
                     } catch (Error xFinally) {
@@ -530,10 +530,10 @@ public sealed interface Try<R> permits Try.TryArg, Try.TryBiArg, TryNoArg, Try.T
                         throw xFinally;
                     } catch (Throwable xFinally) {
                         xFinally.addSuppressed(xFunc);
-                        yield Either.left(new Thrown(xFinally));
+                        yield Either.left(Thrown.of(xFinally));
                     }
 
-                    yield Either.left(new Thrown(xFunc));
+                    yield Either.left(Thrown.of(xFunc));
                 }
             };
         }

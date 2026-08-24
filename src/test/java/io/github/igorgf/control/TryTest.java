@@ -65,7 +65,7 @@ class TryTest {
             );
 
             var result = myTry.execute();
-            assertEquals(Either.left(new Thrown(x)), result);
+            assertEquals(Either.left(Thrown.of(x)), result);
         }
 
         @Test
@@ -100,7 +100,7 @@ class TryTest {
             );
 
             var result = myTry.execute();
-            assertEquals(Either.left(new Thrown(x)), result);
+            assertEquals(Either.left(Thrown.of(x)), result);
             assertTrue(finallyRan.get());
         }
 

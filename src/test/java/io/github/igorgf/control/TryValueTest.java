@@ -22,12 +22,10 @@ class TryValueTest {
             then = "throws NullArgumentException"
     )
     void TryValue_FunctionIsNull() {
-        var result = assertThrows(NullArgumentException.class,() -> {
-            new TryValue<>(
-                    null,
-                    () -> 7
-            );
-        });
+        var result = assertThrows(NullArgumentException.class,() -> new TryValue<>(
+                null,
+                () -> 7
+        ));
         assertEquals("Contract violation. Argument \"function\" is null.", result.getMessage());
     }
 
@@ -38,12 +36,10 @@ class TryValueTest {
             then = "throws NullArgumentException"
     )
     void TryValue_ArgSupplierIsNull() {
-        var result = assertThrows(NullArgumentException.class, () -> {
-            new TryValue<>(
-                    FUNC,
-                    null
-            );
-        });
+        var result = assertThrows(NullArgumentException.class, () -> new TryValue<>(
+                FUNC,
+                null
+        ));
         assertEquals("Contract violation. Argument \"argSupplier\" is null.", result.getMessage());
     }
 
@@ -113,7 +109,7 @@ class TryValueTest {
 
         var result = testTry.execute();
 
-        assertEquals(Either.left(new Thrown(x)), result);
+        assertEquals(Either.left(Thrown.of(x)), result);
     }
 
     @Test

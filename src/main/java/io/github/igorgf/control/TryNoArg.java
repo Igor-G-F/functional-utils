@@ -31,14 +31,14 @@ public record TryNoArg<R>(
      * @throws NullResultException If {@code function} returns a {@code null}.
      */
     @Override
-    public Either<Thrown, R> execute() throws Error, NullResultException {
+    public Either<Thrown<Throwable>, R> execute() throws Error, NullResultException {
         try {
             var funcResult = requireNonNullResult(function, "function");
             return Either.right(funcResult);
         } catch (Error | ContractViolationException x) {
             throw x;
         } catch (Throwable x) {
-            return Either.left(new Thrown(x));
+            return Either.left(Thrown.of(x));
         }
     }
 

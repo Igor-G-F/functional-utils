@@ -47,7 +47,7 @@ public record TryBiResource<T extends AutoCloseable, U extends AutoCloseable, R>
      *         {@code res1Supplier}, or {@code function} return a {@code null}.
      */
     @Override
-    public Either<Thrown, R> execute() throws NullResultException, Error {
+    public Either<Thrown<Throwable>, R> execute() throws NullResultException, Error {
         try (
                 T res0 = requireNonNullResult(res0Supplier, "res0Supplier");
                 U res1 = requireNonNullResult(res1Supplier, "res1Supplier")
@@ -57,7 +57,7 @@ public record TryBiResource<T extends AutoCloseable, U extends AutoCloseable, R>
         } catch (Error | ContractViolationException x) {
             throw x;
         } catch (Throwable x) {
-            return Either.left(new Thrown(x));
+            return Either.left(Thrown.of(x));
         }
     }
 

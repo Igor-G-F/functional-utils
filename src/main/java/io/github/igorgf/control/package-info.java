@@ -21,6 +21,10 @@
  *       {@link io.github.igorgf.control.Try} - a computation that may throw,
  *       with exception handling
  *   </li>
+ *   <li>
+ *       {@link io.github.igorgf.control.Thrown} - an exception container for
+ *       fluent reasoning and handling
+ *   </li>
  * </ul>
  * <p>
  * <b>Null policy:</b> All methods in this package reject {@code null} arguments

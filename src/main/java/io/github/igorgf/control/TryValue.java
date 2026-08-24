@@ -39,7 +39,7 @@ public record TryValue<T, R>(
      *         return a {@code null}.
      */
     @Override
-    public Either<Thrown, R> execute() throws Error, NullResultException {
+    public Either<Thrown<Throwable>, R> execute() throws Error, NullResultException {
         try {
             var arg = requireNonNullResult(argSupplier, "argSupplier");
             var funcResult = requireNonNullResult(function, arg);
@@ -47,7 +47,7 @@ public record TryValue<T, R>(
         } catch (Error | ContractViolationException x) {
             throw x;
         } catch (Throwable x) {
-            return Either.left(new Thrown(x));
+            return Either.left(Thrown.of(x));
         }
     }
 
