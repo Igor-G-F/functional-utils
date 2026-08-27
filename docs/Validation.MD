@@ -73,15 +73,31 @@ Either<List<String>, User> createUser(
         case Accumulated<String, User>(List<String> errors) -> Either.left(errors);
     };
 }
-
-void examples() {
-    var idClash = new User()
-}
 ```
-
-
-
-TODO: document the API and edge uses cases like recovery. 
 
 **NOTE:** *Use [Either](Either.MD), when requiring single error handling.*    
 **NOTE:** *Use [Option](Option.MD), when reasoning explicitly about a presence or absence of a value.*
+
+## Create a new `Validation`
+
+### Use result factories:
+```java
+Validation<String, Integer> isEven(Integer num) {
+    if (num == null) return Validation.critical("Must not be null.");
+    if (num % 2 == 0) return Validation.valid(num);
+    return Validation.accumulated("Not divisible by 2.");
+}
+```
+
+### Use `Validation.validate` and `Validation.validateNotNull` predicate factories:
+```java
+Validation<String, Integer> isNotNull = Validation.validateNotNull(
+        num,
+        () -> "Must not be null."
+); // Critical if num is null, Valid otherwise
+Validation<String, Integer> isEven = Validation.validate(
+        num,
+        n -> n % 2 == 0, // predicate
+        n -> n + " is not divisible by 2." // error provider
+); // Valid if num divisible by 2, Accumulated otherwise
+```

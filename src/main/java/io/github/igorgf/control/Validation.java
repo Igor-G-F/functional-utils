@@ -7,8 +7,10 @@ import io.github.igorgf.function.CheckedSupplier;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static io.github.igorgf.control.ControlUtils.requireNonNull;
+import static io.github.igorgf.control.ControlUtils.requireNonNullResult;
 
 /**
  * A disjoint union (sum type) representing one of three distinct states:
@@ -155,6 +157,77 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
     }
 
     /**
+     * A convenience factory method overload for
+     * {@link #validateNotNull(Object, Supplier, boolean)}.
+     * <p>
+     * This method always assumes that a {@code null} {@code target} is a
+     * {@link Critical}.
+     *
+     * @see Valid
+     * @see Critical
+     * @see #validateNotNull(Object, Supplier, boolean)
+     *
+     * @param <T> The type of the object being validated.
+     * @param <E> The error type reference.
+     * @param target The value to be validated.
+     * @param errorSupplier Error provider should the result be {@link Invalid}.
+     *
+     * @return {@code Valid<E, T>}, containing {@code target}, when
+     *         {@code target} is NOT a {@code null}. <br>
+     *         {@code Critical<E, T>}, containing product of
+     *         {@code errorSupplier}, when {@code target} is a {@code null}.
+     *
+     * @throws NullArgumentException If {@code errorSupplier} is a {@code null}.
+     * @throws NullResultException If {@code errorSupplier} returns a {@code null}.
+     */
+    static <E, T> Validation<E, T> validateNotNull(
+            T target,
+            Supplier<E> errorSupplier
+    ) throws NullArgumentException, NullResultException {
+        return validateNotNull(target, errorSupplier, true);
+    }
+
+    /**
+     * A convenience factory method for creating a {@code Validation<E, T>}
+     * based on whether {@code target} is a {@code null}.
+     *
+     * @see Valid
+     * @see Accumulated
+     * @see Critical
+     *
+     * @param <T> The type of the object being validated.
+     * @param <E> The error type reference.
+     * @param target The value to be validated.
+     * @param errorSupplier Error provider should the result be {@link Invalid}.
+     * @param critical If {@code true} then an {@link Invalid} result will be of
+     *        type {@code Critical<E, T>}. If {@code false} the result type will
+     *        be {@code Accumulated<E, T>}.
+     *
+     * @return {@code Valid<E, T>}, containing {@code target}, when
+     *         {@code target} is NOT a {@code null}. <br>
+     *         {@code Accumulated<E, T>}, containing product of
+     *         {@code errorSupplier}, when {@code target} is a {@code null}
+     *         and {@code critical} is {@code false}. <br>
+     *         {@code Critical<E, T>}, containing product of
+     *         {@code errorSupplier}, when {@code target} is a {@code null}
+     *          and {@code critical} is {@code true}.
+     *
+     * @throws NullArgumentException If {@code errorSupplier}is a {@code null}.
+     * @throws NullResultException If {@code errorSupplier} returns a {@code null}.
+     */
+    static <E, T> Validation<E, T> validateNotNull(
+            T target,
+            Supplier<E> errorSupplier,
+            boolean critical
+    ) throws NullArgumentException, NullResultException {
+        requireNonNull(critical, "critical");
+        requireNonNull(errorSupplier, "errorSupplier");
+        if (target != null) return valid(target);
+        var error = requireNonNullResult(errorSupplier::get, "errorSupplier");
+        return critical ? critical(error) : accumulated(error);
+    }
+
+    /**
      * A convenience factory method for creating a {@code Validation<E, T>}
      * based on the result of {@code value} being tested against
      * {@code predicate}.
@@ -165,7 +238,7 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @param <T> The type of the object being validated.
      * @param <E> The error type reference.
-     * @param value The value to be validated.
+     * @param target The value to be validated.
      * @param predicate The condition tested against {@code value}.
      * @param errorMapper Error provider should the result be {@link Invalid}.
      * @param critical If {@code true} then an {@link Invalid} result will be of
@@ -185,19 +258,18 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *         a {@code null}.
      */
     static <E, T> Validation<E, T> validate(
-            T value,
+            T target,
             Predicate<? super T> predicate,
             Function<? super T, ? extends E> errorMapper,
             boolean critical
     ) throws NullArgumentException {
-        requireNonNull(value, "value");
+        requireNonNull(target, "value");
         requireNonNull(predicate, "predicate");
-        if (predicate.test(value)) {
-            return valid(value);
-        }
-
         requireNonNull(errorMapper, "errorMapper");
-        var error = errorMapper.apply(value);
+        if (predicate.test(target)) {
+            return valid(target);
+        }
+        var error = errorMapper.apply(target);
         requireNonNull(critical, "critical");
         return critical ? critical(error) : accumulated(error);
     }
@@ -214,7 +286,7 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *
      * @param <T> The type of the object being validated.
      * @param <E> The error type reference.
-     * @param value The value to be validated.
+     * @param target The value to be validated.
      * @param predicate The condition tested against {@code value}.
      * @param errorMapper Error provider should the result be
      *        {@link Accumulated}.
@@ -229,11 +301,11 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      *         a {@code null}.
      */
     static <E, T> Validation<E, T> validate(
-            T value,
+            T target,
             Predicate<? super T> predicate,
             Function<? super T, ? extends E> errorMapper
     ) {
-        return validate(value, predicate, errorMapper, false);
+        return validate(target, predicate, errorMapper, false);
     }
 
     /**
