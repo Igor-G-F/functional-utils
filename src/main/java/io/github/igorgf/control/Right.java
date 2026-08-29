@@ -2,8 +2,6 @@ package io.github.igorgf.control;
 
 import io.github.igorgf.function.CheckedFunction;
 
-import java.util.Objects;
-
 import static io.github.igorgf.control.ControlUtils.requireNonNull;
 import static io.github.igorgf.control.ControlUtils.requireNonNullResult;
 
@@ -137,8 +135,8 @@ public record Right<L, R>(R value) implements Either<L, R> {
             CheckedFunction<? super L, ? extends T, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
     ) throws X2, NullArgumentException, NullResultException {
-        Objects.requireNonNull(rightMapper);
-        return Objects.requireNonNull(rightMapper.apply(value));
+        requireNonNull(rightMapper, "rightMapper");
+        return requireNonNullResult(rightMapper, value);
     }
 
     /**
