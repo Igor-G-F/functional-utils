@@ -27,6 +27,25 @@ import static io.github.igorgf.control.ControlUtils.requireNonNullResult;
 public sealed interface Invalid<E, T> extends Validation<E, T> permits Accumulated, Critical {
 
     /**
+     * The severity of an {@link Invalid}: whether it short-circuits
+     * {@link Validation#combine} or participates in error accumulation.
+     */
+    enum Severity {
+        /**
+         * Participates in error accumulation alongside other invalid results.
+         *
+         * @see Accumulated
+         * */
+        ACCUMULATED,
+        /**
+         * Short-circuits any subsequent {@code combine}.
+         *
+         * @see Critical
+         * */
+        CRITICAL
+    }
+
+    /**
      * {@inheritDoc}
      * <p>
      * The unchecked cast from {@code this} to {@code Validation<E, U>} is

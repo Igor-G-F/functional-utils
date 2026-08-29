@@ -3,8 +3,6 @@ package io.github.igorgf.control;
 import io.github.igorgf.function.CheckedConsumer;
 import io.github.igorgf.function.CheckedFunction;
 
-import java.util.function.Predicate;
-
 import static io.github.igorgf.control.ControlUtils.requireNonNull;
 import static io.github.igorgf.control.ControlUtils.requireNonNullResult;
 
@@ -49,6 +47,18 @@ import static io.github.igorgf.control.ControlUtils.requireNonNullResult;
  * @param <X> The {@link Throwable} type being capture.
  */
 public record Thrown<X extends Throwable>(X captured)  {
+
+    /**
+     * The strategy used to match {@link #captured()} against a candidate
+     * throwable type.
+     */
+    public enum MatchStrategy {
+        /** Matches by assignability, mirroring how a {@code catch} clause matches. */
+        ASSIGNABLE,
+        /** Matches only when the candidate type equals the captured throwable's exact runtime class. */
+        EXACT
+    }
+
 
     /**
      * <b>Rejects {@link Error}:</b> {@code Thrown} models a <em>recoverable</em>
@@ -112,7 +122,8 @@ public record Thrown<X extends Throwable>(X captured)  {
 
     /**
      * Recovers from the {@link #captured()} throwable by applying
-     * {@code recovery}, turning the failure into a usable value {@code T}.
+     * {@code recoveryMapper}, turning the {@code this} into a usable
+     * value {@code T}.
      * <p>
      * This is the primary escape hatch from a {@code ThrownX}, converting the
      * captured exception back into a value the caller can continue processing
@@ -120,7 +131,7 @@ public record Thrown<X extends Throwable>(X captured)  {
      *
      * @param <T> The recovered value type.
      * @param <X2> The checked exception type {@code recovery} may throw.
-     * @param recoveryMapper Consumes {@link #captured()} and produces a recovery value.
+     * @param recoveryMapper Consumes {@code this} and produces a recovery value.
      *
      * @return The value produced by {@code recovery}.
      *
@@ -129,10 +140,83 @@ public record Thrown<X extends Throwable>(X captured)  {
      * @throws NullResultException If {@code recovery} returns {@code null}.
      */
     public <T, X2 extends Throwable> T recover(
-            CheckedFunction<? super X, ? extends T, ? extends X2> recoveryMapper
+            CheckedFunction<? super Thrown<X>, ? extends T, ? extends X2> recoveryMapper
     ) throws X2, NullArgumentException, NullResultException {
         requireNonNull(recoveryMapper, "recoveryMapper");
-        return requireNonNullResult(recoveryMapper, this.captured);
+        return requireNonNullResult(recoveryMapper, this);
+    }
+
+    /**
+     * Elevates {@code this} into an {@link Either}, delegating to {@code mapper}
+     * when {@link #captured()} is an instance of {@code matchTarget}. Otherwise,
+     * preserves {@code this} unchanged as a {@code Left}.
+     * <p>
+     * Matching logic is determined by {@code matchStrategy}. Always matches if
+     * {@code matchTargets} contains 0 elements.
+     *
+     * @see #recover(CheckedFunction)
+     * @see MatchStrategy
+     *
+     * @param <T> The throwable type {@code mapper} operates on.
+     * @param <S> The right hand value type {@code mapper} may produce.
+     * @param <X2> The checked exception type {@code mapper} may throw.
+     * @param matchStrategy Determines the matching logic.
+     * @param mapper Consumes {@code this}, narrowed to {@code Thrown<T>}, and
+     *        produces an {@link Either}.
+     * @param matchTarget The type {@link #captured()} must be an instance of.
+     *
+     * @return {@code mapper}'s result, when {@code matchTarget} matches. <br>
+     *         {@code Either.left(this)}, unchanged, otherwise.
+     *
+     * @throws X2 If {@code mapper} runs and throws it.
+     * @throws NullArgumentException If {@code mapper} or {@code matchTarget}
+     *         is {@code null}.
+     * @throws NullResultException If {@code mapper} returns {@code null}.
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends X, S, X2 extends Throwable> Either<Thrown<X>, S> toEither(
+            MatchStrategy matchStrategy,
+            CheckedFunction<? super Thrown<T>, ? extends Either<Thrown<X>, S>, ? extends X2> mapper,
+            Class<T> matchTarget
+    ) throws X2, NullArgumentException, NullResultException {
+        requireNonNull(matchStrategy, "matchStrategy");
+        requireNonNull(mapper, "mapper");
+        requireNonNull(matchTarget, "matchTarget");
+        if (matches(matchStrategy, matchTarget)) {
+            return requireNonNullResult(mapper, (Thrown<T>) this);
+        }
+        return Either.left(this);
+    }
+
+    /**
+     * Overload of {@link #toEither(MatchStrategy, CheckedFunction, Class)}.
+     * <p>
+     * Unlike {@link #toEither(MatchStrategy, CheckedFunction, Class)}, this
+     * always matches by {@link MatchStrategy#ASSIGNABLE}.
+     *
+     * @see #toEither(MatchStrategy, CheckedFunction, Class) 
+     * @see MatchStrategy
+     *
+     * @param <T> The throwable type {@code mapper} operates on.
+     * @param <S> The right hand value type {@code mapper} may produce.
+     * @param <X2> The checked exception type {@code mapper} may throw.
+     * @param mapper Consumes {@code this}, narrowed to {@code Thrown<T>}, and
+     *        produces an {@link Either}.
+     * @param matchTarget The type {@link #captured()} must be an instance of.
+     *
+     * @return {@code mapper}'s result, when {@code matchTarget} matches. <br>
+     *         {@code Either.left(this)}, unchanged, otherwise.
+     *
+     * @throws X2 If {@code mapper} runs and throws it.
+     * @throws NullArgumentException If {@code mapper} or {@code matchTarget}
+     *         is {@code null}.
+     * @throws NullResultException If {@code mapper} returns {@code null}.
+     */
+    public <T extends X, S, X2 extends Throwable> Either<Thrown<X>, S> toEither(
+            CheckedFunction<? super Thrown<T>, ? extends Either<Thrown<X>, S>, ? extends X2> mapper,
+            Class<T> matchTarget
+    ) throws X2, NullArgumentException, NullResultException {
+        return toEither(MatchStrategy.ASSIGNABLE, mapper, matchTarget);
     }
     // endregion ———————————————— Transformation ———————————————————
 
@@ -166,342 +250,312 @@ public record Thrown<X extends Throwable>(X captured)  {
     // region ——————————————————— Handlers ———————————————————
     /**
      * Invokes {@code handler} with the {@link #captured()} throwable when it is
-     * an instance of one of the given {@code throwables} types, then returns
+     * an instance of one of the given {@code matchTargets} types, then returns
      * {@code this} for chaining.
      * <p>
-     * Matching is by assignability. For exact-class-only matching, use
-     * {@link #handleExact(CheckedConsumer, Class[])}.
+     * Matching logic is determined by {@code matchStrategy}. Always matches if
+     * {@code matchTargets} contains 0 elements.
      * <p>
      * This uses a generic {@link Throwable} handler, to bind the handler to a
-     * concrete type use {@link #handle(CheckedConsumer, Class)}.
+     * concrete type use {@link #handle(MatchStrategy, CheckedConsumer, Class)}.
      *
-     * @see #handle(CheckedConsumer, Class)
-     * @see #handleExact(CheckedConsumer, Class[])
+     * @see #handle(CheckedConsumer, Class[])
+     * @see MatchStrategy
      *
      * @param <X2> The checked exception type the {@code handler} may throw.
+     * @param matchStrategy Determines the matching logic.
      * @param handler The action to run against the {@link #captured()} on a
      *        match.
-     * @param throwables The throwable types to match, empty always matches.
+     * @param matchTargets The throwable types to match, empty always matches.
      *
      * @return {@code this}, to allow chaining further reactions.
      *
      * @throws X2 If the {@code handler} runs and throws it.
-     * @throws NullArgumentException If {@code handler}, the {@code throwables}
+     * @throws NullArgumentException If {@code matchStrategy}, {@code handler}, 
+     *         the {@code matchTargets} array, or any element of it is {@code null}.
+     */
+    @SafeVarargs
+    public final <X2 extends Throwable> Thrown<X> handle(
+            MatchStrategy matchStrategy,
+            CheckedConsumer<X, X2> handler,
+            Class<? extends X>... matchTargets
+    ) throws X2, NullArgumentException {
+        requireNonNull(matchStrategy, "matchStrategy");
+        requireNonNull(handler, "handler");
+        requireNonNull(matchTargets, "matchTargets");
+        if (matchTargets.length == 0 || matches(matchStrategy, matchTargets)) {
+            handler.accept(captured);
+        }
+        return this;
+    }
+
+    /**
+     * Overload of {@link #handle(MatchStrategy, CheckedConsumer, Class[])}.
+     * <p>
+     * Unlike {@link #handle(MatchStrategy, CheckedConsumer, Class[])}, this
+     * always matches by {@link MatchStrategy#ASSIGNABLE}.
+     * 
+     * @see #handle(MatchStrategy, CheckedConsumer, Class[])
+     * 
+     * @param <X2> The checked exception type the {@code handler} may throw.
+     * @param handler The action to run against the {@link #captured()} on a
+     *        match.
+     * @param matchTargets The throwable types to match, empty always matches.
+     *
+     * @return {@code this}, to allow chaining further reactions.
+     *
+     * @throws X2 If the {@code handler} runs and throws it.
+     * @throws NullArgumentException If {@code handler}, the {@code matchTargets}
      *         array, or any element of it is {@code null}.
      */
     @SafeVarargs
     public final <X2 extends Throwable> Thrown<X> handle(
             CheckedConsumer<X, X2> handler,
-            Class<? extends X>... throwables
+            Class<? extends X>... matchTargets
     ) throws X2, NullArgumentException {
-        requireNonNull(handler, "handler");
-        requireNonNull(throwables, "throwables");
-        if (throwables.length == 0 || matchesAssignable(throwables)) {
-            handler.accept(captured);
-        }
-        return this;
+        return  handle(MatchStrategy.ASSIGNABLE, handler, matchTargets);
     }
 
     /**
      * Invokes {@code handler} with the {@link #captured()} throwable when it is
-     * an instance of the given {@code exceptionType}, then returns {@code this}
+     * an instance of the given {@code matchTarget}, then returns {@code this}
      * for chaining.
      * <p>
-     * Matching is by assignability. For exact-class-only matching, use
-     * {@link #handleExact(CheckedConsumer, Class)}.
+     * Matching logic is determined by {@code matchStrategy}.
      * <p>
      * Unlike {@link #handle(CheckedConsumer, Class[])}, the {@code handler}
      * is bound to a specific exception type {@code T}.
      *
-     * @see #handleExact(CheckedConsumer, Class)
-     * @see #handle(CheckedConsumer, Class[])
+     * @see #handle(CheckedConsumer, Class)
+     * @see MatchStrategy
      *
      * @param <T> The throwable type the {@code handler} consumes.
      * @param <X2> The checked exception type the {@code handler} may throw.
+     * @param matchStrategy Determines the matching logic.
      * @param handler The action to run against the {@link #captured()} on a
      *        match.
-     * @param exceptionType The type the wrapped throwable must be an instance
+     * @param matchTarget The type the wrapped throwable must be an instance
      *        of.
      *
      * @return {@code this}, to allow chaining further reactions.
      *
      * @throws X2 If the {@code handler} runs and throws it.
-     * @throws NullArgumentException If {@code handler} or {@code exceptionType}
+     * @throws NullArgumentException If {@code matchStrategy}, {@code handler}
+     *         or {@code matchTarget} is {@code null}.
+     */
+    public <T extends X, X2 extends Throwable> Thrown<X> handle(
+            MatchStrategy matchStrategy,
+            CheckedConsumer<T, X2> handler,
+            Class<T> matchTarget
+    ) throws X2, NullArgumentException {
+        requireNonNull(matchStrategy, "matchStrategy");
+        requireNonNull(handler, "handler");
+        requireNonNull(matchTarget, "matchTarget");
+        if (matches(matchStrategy, matchTarget)) {
+            handler.accept(matchTarget.cast(this.captured));
+        }
+        return this;
+    }
+
+    /**
+     * Overload of {@link #handle(MatchStrategy, CheckedConsumer, Class)}.
+     * <p>
+     * Unlike {@link #handle(MatchStrategy, CheckedConsumer, Class)}, this
+     * always matches by {@link MatchStrategy#ASSIGNABLE}.
+     *
+     * @see #handle(MatchStrategy, CheckedConsumer, Class)
+     *
+     * @param <T> The throwable type the {@code handler} consumes.
+     * @param <X2> The checked exception type the {@code handler} may throw.
+     * @param handler The action to run against the {@link #captured()} on a
+     *        match.
+     * @param matchTarget The type the wrapped throwable must be an instance
+     *        of.
+     *
+     * @return {@code this}, to allow chaining further reactions.
+     *
+     * @throws X2 If the {@code handler} runs and throws it.
+     * @throws NullArgumentException If {@code handler} or {@code matchTarget}
      *         is {@code null}.
      */
     public <T extends X, X2 extends Throwable> Thrown<X> handle(
             CheckedConsumer<T, X2> handler,
-            Class<T> exceptionType
+            Class<T> matchTarget
     ) throws X2, NullArgumentException {
-        requireNonNull(handler, "handler");
-        requireNonNull(exceptionType, "exceptionType");
-        if (exceptionType.isInstance(this.captured)) {
-            handler.accept(exceptionType.cast(this.captured));
-        }
-        return this;
-    }
-
-    /**
-     * Invokes {@code handler} with the {@link #captured()} throwable when its
-     * exact runtime class matches one of the given {@code throwables} types,
-     * then returns {@code this} for chaining.
-     * <p>
-     * Matching is by exact class equality, a filter for {@code IOException}
-     * does <b>not</b> match a captured {@code FileNotFoundException}. For
-     * subtype-inclusive matching, use {@link #handle(CheckedConsumer, Class[])}.
-     * <p>
-     * This uses a generic {@link Throwable} handler, to bind the handler to a
-     * concrete type use {@link #handleExact(CheckedConsumer, Class)}.
-     *
-     * @see #handleExact(CheckedConsumer, Class)
-     * @see #handle(CheckedConsumer, Class[])
-     *
-     * @param <X2> The checked exception type the {@code handler} may throw.
-     * @param handler The action to run against the {@link #captured()} on a
-     *        match.
-     * @param throwables The throwable types to match, empty always matches.
-     *
-     * @return {@code this}, to allow chaining further reactions.
-     *
-     * @throws X2 If the {@code handler} runs and throws it.
-     * @throws NullArgumentException If {@code handler}, the {@code throwables}
-     *         array, or any element of it is {@code null}.
-     */
-    @SafeVarargs
-    public final <X2 extends Throwable> Thrown<X> handleExact(
-            CheckedConsumer<X, X2> handler,
-            Class<? extends X>... throwables
-    ) throws X2, NullArgumentException {
-        requireNonNull(handler, "handler");
-        requireNonNull(throwables, "throwables");
-        if (throwables.length == 0 || matchesExact(throwables)) {
-            handler.accept(captured);
-        }
-        return this;
-    }
-
-    /**
-     * Invokes {@code handler} with the {@link #captured()} throwable when its
-     * exact runtime class matches the given {@code exceptionType}, then returns
-     * {@code this} for chaining.
-     * <p>
-     * Matching is by exact class equality, a filter for {@code IOException}
-     * does <b>not</b> match a captured {@code FileNotFoundException}. For
-     * subtype-inclusive matching, use {@link #handle(CheckedConsumer, Class)}.
-     * <p>
-     * Unlike {@link #handle(CheckedConsumer, Class[])}, the {@code handler}
-     * is bound to a specific exception type {@code T}.
-     *
-     * @see #handleExact(CheckedConsumer, Class[])
-     * @see #handle(CheckedConsumer, Class)
-     *
-     * @param <T> The throwable type the {@code handler} consumes.
-     * @param <X2> The checked exception type the {@code handler} may throw.
-     * @param handler The action to run against the {@link #captured()} on a
-     *        match.
-     * @param exceptionType The type the wrapped throwable must be an instance
-     *        of.
-     *
-     * @return {@code this}, to allow chaining further reactions.
-     *
-     * @throws X2 If the {@code handler} runs and throws it.
-     * @throws NullArgumentException If {@code handler} or {@code exceptionType}
-     *         is {@code null}.
-     */
-    public <T extends X, X2 extends Throwable> Thrown<X> handleExact(
-            CheckedConsumer<T, X2> handler,
-            Class<T> exceptionType
-    ) throws X2, NullArgumentException {
-        requireNonNull(handler, "handler");
-        requireNonNull(exceptionType, "exceptionType");
-        if (exceptionType.equals(this.captured.getClass())) {
-            handler.accept(exceptionType.cast(this.captured));
-        }
-        return this;
+        return handle(MatchStrategy.ASSIGNABLE, handler, matchTarget);
     }
     // endregion ———————————————— Handlers ———————————————————
 
     // region ——————————————————— Rethrows ———————————————————
     /**
-     * Rethrows {@link #captured()} when its exact runtime class matches one of
-     * {@code throwables}, or when no arguments are given (matches everything).
-     * Otherwise, returns {@code this} for chaining.
+     * Rethrows {@link #captured()} when it is an instance of one of
+     * {@code matchTargets} or when no arguments are
+     * given. Otherwise, returns {@code this} for chaining.
      * <p>
-     * Matching is by exact class equality, a filter for {@code IOException}
-     * does <b>not</b> match a captured {@code FileNotFoundException}. For
-     * subtype-inclusive matching, use {@link #rethrow(Class[])}.
+     * Matching logic is determined by {@code matchStrategy}.
      *
      * @see #rethrow(Class[])
+     * @see MatchStrategy
      *
-     * @param throwables The exact types to match; empty matches everything.
+     * @param matchTargets The types to match, empty matches everything.
+     * @param matchStrategy Determines the matching logic.
      *
      * @return {@code this}, when the throwable does not match.
      *
      * @throws X If {@link #captured()} matches.
-     * @throws NullArgumentException If {@code throwables} or any element is
-     *         {@code null}.
+     * @throws NullArgumentException If {@code matchStrategy} or
+     *         {@code matchTargets}, or any element is {@code null}.
      */
     @SafeVarargs
-    public final Thrown<X> rethrowExact(
-            Class<? extends X>... throwables
+    public final Thrown<X> rethrow(
+            MatchStrategy matchStrategy,
+            Class<? extends X>... matchTargets
     ) throws X, NullArgumentException {
-        requireNonNull(throwables, "throwables");
-        if (throwables.length == 0 || matchesExact(throwables)) {
+        requireNonNull(matchStrategy, "matchStrategy");
+        requireNonNull(matchTargets, "matchTargets");
+        if (matchTargets.length == 0 || matches(matchStrategy, matchTargets)) {
             throw captured;
         }
         return this;
     }
 
     /**
-     * Rethrows {@link #captured()}, narrowed to {@code T}, when its exact
-     * runtime class equals {@code throwable}. Otherwise, returns {@code this}.
+     * Overload of {@link #rethrow(MatchStrategy, Class[])}.
      * <p>
-     * Unlike {@link #rethrowExact(Class[])}, the declared exception is narrowed
-     * from {@code X} to the more specific {@code T}.
-     * <p>
-     * Matching is by exact class equality, a filter for {@code IOException}
-     * does <b>not</b> match a captured {@code FileNotFoundException}. For
-     * subtype-inclusive matching, use {@link #rethrow(Class)}.
+     * Unlike {@link #rethrow(MatchStrategy, Class[])}, this always matches by
+     * {@link MatchStrategy#ASSIGNABLE}. Empty {@code matchTargets} always
+     * throws {@code X}.
      *
-     * @see #rethrow(Class)
+     * @see #rethrow(MatchStrategy, Class[])
      *
-     * @param <T> The exact throwable type to match and rethrow.
-     * @param throwable The exact type {@link #captured()} must equal.
-     *
-     * @return {@code this}, when the throwable does not match.
-     *
-     * @throws T If {@link #captured()} matches.
-     * @throws NullArgumentException If {@code throwable} is {@code null}.
-     */
-    public <T extends X> Thrown<X> rethrowExact(
-            Class<T> throwable
-    ) throws T, NullArgumentException {
-        requireNonNull(throwable, "throwable");
-        if (throwable.equals(this.captured.getClass())) {
-            throw throwable.cast(this.captured);
-        }
-        return this;
-    }
-
-    /**
-     * Rethrows {@link #captured()} when it is an instance of one of
-     * {@code throwables} (matching subtypes too), or when no arguments are
-     * given. Otherwise, returns {@code this} for chaining.
-     * <p>
-     * Matching is by assignability, this mirrors how a {@code catch} clause
-     * matches. For exact-class-only matching, use {@link #rethrowExact(Class[])}.
-     *
-     * @see #rethrowExact(Class[])
-     *
-     * @param throwables The types to match, including subtypes; empty matches
-     *        everything.
+     * @param matchTargets The types to match, empty matches everything.
      *
      * @return {@code this}, when the throwable does not match.
      *
      * @throws X If {@link #captured()} matches.
-     * @throws NullArgumentException If {@code throwables} or any element is
+     * @throws NullArgumentException If {@code matchTargets}, or any element is
      *         {@code null}.
      */
     @SafeVarargs
     public final Thrown<X> rethrow(
-            Class<? extends X>... throwables
+            Class<? extends X>... matchTargets
     ) throws X, NullArgumentException {
-        requireNonNull(throwables, "throwables");
-        if (throwables.length == 0 || matchesAssignable(throwables)) {
-            throw captured;
-        }
-        return this;
+        return rethrow(MatchStrategy.ASSIGNABLE, matchTargets);
     }
 
     /**
      * Rethrows {@link #captured()}, narrowed to {@code T}, when it is an
-     * instance of {@code throwable}. Otherwise, returns {@code this}.
+     * instance of {@code matchTarget}. Otherwise, returns {@code this}.
      * <p>
-     * Unlike {@link #rethrow(Class[])}, the declared exception is narrowed from
-     * {@code X} to the more specific {@code T}.
+     * Unlike {@link #rethrow(MatchStrategy, Class[])}, the declared exception
+     * is narrowed from {@code X} to the more specific {@code T}.
      * <p>
-     * Matching is by assignability, this mirrors how a {@code catch} clause
-     * matches. For exact-class-only matching, use {@link #rethrowExact(Class)}.
+     * Matching logic is determined by {@code matchStrategy}.
      *
-     * @see #rethrowExact(Class)
+     * @see #rethrow(Class)
+     * @see MatchStrategy
      *
      * @param <T> The throwable type to match and rethrow.
-     * @param throwable The type {@link #captured()} must be an instance of.
+     * @param matchTarget The type {@link #captured()} must be an instance of.
+     * @param matchStrategy Determines the matching logic.
      *
      * @return {@code this}, when the throwable does not match.
      *
      * @throws T If {@link #captured()} matches.
-     * @throws NullArgumentException If {@code throwable} is {@code null}.
+     * @throws NullArgumentException If {@code matchStrategy} or
+     *         {@code matchTarget} is {@code null}.
      */
     public <T extends X> Thrown<X> rethrow(
-            Class<T> throwable
+            MatchStrategy matchStrategy,
+            Class<T> matchTarget
     ) throws T, NullArgumentException {
-        requireNonNull(throwable, "throwable");
-        if (throwable.isInstance(this.captured)) {
-            throw throwable.cast(this.captured);
+        requireNonNull(matchStrategy, "matchStrategy");
+        requireNonNull(matchTarget, "matchTarget");
+        if (matches(matchStrategy, matchTarget)) {
+            throw matchTarget.cast(this.captured);
         }
         return this;
     }
 
     /**
-     * Rethrows {@link #captured()}, without declaring or requiring the caller to
-     * handle it, when its exact runtime class matches one of {@code throwables},
-     * or when no arguments are given. Otherwise, returns {@code this}.
-     * <p>
-     * This bypasses checked-exception enforcement via an unchecked cast, see
-     * {@link #rethrowSneaky(Class[])} for the assignability-matching counterpart.
-     * Calling this method is always an explicit, deliberate act.
+     * Overload of {@link #rethrow(MatchStrategy, Class)}, this always uses
+     * a {@link MatchStrategy#ASSIGNABLE}.
      *
-     * @see #rethrowSneaky(Class[])
-     * @see #rethrowExact(Class[])
+     * @see #rethrow(MatchStrategy, Class)
      *
-     * @param throwables The exact types to match; empty matches everything.
+     * @param <T> The throwable type to match and rethrow.
+     * @param matchTarget The type {@link #captured()} must be an instance of.
      *
      * @return {@code this}, when the throwable does not match.
      *
-     * @throws NullArgumentException If {@code throwables} or any element is
-     *         {@code null}.
+     * @throws T If {@link #captured()} matches.
+     * @throws NullArgumentException If {@code matchTarget} is {@code null}.
      */
-    @SafeVarargs
-    public final Thrown<X> rethrowExactSneaky(
-            Class<? extends Throwable>... throwables
-    ) throws NullArgumentException {
-        requireNonNull(throwables, "throwables");
-        if (throwables.length == 0 || matchesExact(throwables)) {
-            rethrowSneaky(this.captured);
-        }
-        return this;
+    public <T extends X> Thrown<X> rethrow(
+            Class<T> matchTarget
+    ) throws T, NullArgumentException {
+        return rethrow(MatchStrategy.ASSIGNABLE, matchTarget);
     }
 
     /**
      * Rethrows {@link #captured()}, without declaring or requiring the caller to
-     * handle it, when it is an instance of one of {@code throwables}, or when no
-     * arguments are given. Otherwise, returns {@code this}.
+     * handle it, when it matches of one of {@code matchTargets}, or when no
+     * arguments are given. Always matches on empty {@code matchTargets}.
+     * Otherwise, returns {@code this}.
      * <p>
-     * This bypasses checked-exception enforcement via an unchecked cast, see
-     * {@link #rethrowExactSneaky(Class[])} for the exact-match counterpart.
-     * Calling this method is always an explicit, deliberate act.
+     * This bypasses checked-exception enforcement via an unchecked cast,
+     * calling this method is always an explicit, deliberate act.
      *
-     * @see #rethrowExactSneaky(Class[])
-     * @see #rethrow(Class[])
+     * @see #rethrowSneaky(Class[])
+     * @see MatchStrategy
      *
-     * @param throwables The types to match, including subtypes; empty matches
+     * @param matchStrategy Determines the matching logic.
+     * @param matchTargets The types to match, including subtypes; empty matches
      *        everything.
      *
      * @return {@code this}, when the throwable does not match.
      *
-     * @throws NullArgumentException If {@code throwables} or any element is
+     * @throws NullArgumentException If {@code matchStrategy} or
+     *         {@code matchTargets}, or any element is {@code null}.
+     */
+    @SafeVarargs
+    public final Thrown<X> rethrowSneaky(
+            MatchStrategy matchStrategy,
+            Class<? extends Throwable>... matchTargets
+    ) throws NullArgumentException {
+        requireNonNull(matchStrategy, "matchStrategy");
+        requireNonNull(matchTargets, "matchTargets");
+        if (matchTargets.length == 0 || matches(matchStrategy, matchTargets)) {
+            rethrowSneaky(this.captured);
+        }
+        return this;
+    }
+
+    /**
+     * Overload of {@link #rethrowSneaky(MatchStrategy, Class[])},
+     * <p>
+     * Unlike {@link #rethrowSneaky(MatchStrategy, Class[])}, this always
+     * matches by {@link MatchStrategy#ASSIGNABLE}. Empty {@code matchTargets}
+     * always throws {@code X}.
+     * <p>
+     * This bypasses checked-exception enforcement via an unchecked cast,
+     * calling this method is always an explicit, deliberate act.
+     *
+     * @see #rethrowSneaky(Class[])
+     *
+     * @param matchTargets The types to match, including subtypes; empty matches
+     *        everything.
+     *
+     * @return {@code this}, when the throwable does not match.
+     *
+     * @throws NullArgumentException If {@code matchTargets} or any element is
      *         {@code null}.
      */
     @SafeVarargs
     public final Thrown<X> rethrowSneaky(
-            Class<? extends Throwable>... throwables
+            Class<? extends Throwable>... matchTargets
     ) throws NullArgumentException {
-        requireNonNull(throwables, "throwables");
-        if (throwables.length == 0 || matchesAssignable(throwables)) {
-            rethrowSneaky(this.captured);
-        }
-        return this;
+        return rethrowSneaky(MatchStrategy.ASSIGNABLE, matchTargets);
     }
     // endregion ———————————————— Rethrows ———————————————————
 
@@ -525,44 +579,25 @@ public record Thrown<X extends Throwable>(X captured)  {
     }
 
     /**
-     * Reports whether {@link #captured()} is an exact instance of one of the
-     * given types {@code throwables}.
-     *
-     * @param throwables The types to test against.
-     *
-     * @return {@code true} if the wrapped throwable matches; {@code false}
-     *         otherwise.
-     *
-     * @throws NullArgumentException If the array or any element is {@code null}.
+     * Reports whether {@link #captured()} is assignable from the given type
+     * {@code matchType}.
      */
-    private boolean matchesExact(Class<?>[] throwables) {
-        var i = 0;
-        for (Class<?> type : throwables) {
-            requireNonNull(type, "throwables[" + i + "]");
-            if (type.equals(this.captured.getClass())) {
-                return true;
-            }
-            ++i;
-        }
-        return false;
+    private boolean matches(MatchStrategy matchStrategy, Class<?> matchType) {
+        return switch (matchStrategy) {
+            case ASSIGNABLE -> matchType.isInstance(this.captured);
+            case EXACT -> matchType.equals(this.captured.getClass());
+        };
     }
 
     /**
-     * Reports whether {@link #captured()} is assignable from any of the given
-     * types {@code throwables}.
-     *
-     * @param throwables The types to test against.
-     *
-     * @return {@code true} if the wrapped throwable matches; {@code false}
-     *         otherwise.
-     *
-     * @throws NullArgumentException If the array or any element is {@code null}.
+     * Reports whether {@link #captured()} is assignable from the given types
+     * {@code matchTargets}.
      */
-    private boolean matchesAssignable(Class<?>[] throwables) {
+    private boolean matches(MatchStrategy matchStrategy, Class<?>... matchTargets) {
         var i = 0;
-        for (Class<?> type : throwables) {
-            requireNonNull(type, "throwables[" + i + "]");
-            if (type.isInstance(this.captured)) {
+        for (Class<?> type : matchTargets) {
+            requireNonNull(type, "matchTargets[" + i + "]");
+            if (matches(matchStrategy, type)) {
                 return true;
             }
             ++i;

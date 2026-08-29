@@ -2,6 +2,7 @@ package io.github.igorgf.control;
 
 import io.github.igorgf.GivenWhenThen;
 import io.github.igorgf.GivenWhenThenGenerator;
+import io.github.igorgf.control.Thrown.MatchStrategy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DisplayNameGeneration;
 import org.junit.jupiter.api.Test;
@@ -14,9 +15,10 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import static io.github.igorgf.control.Thrown.MatchStrategy.ASSIGNABLE;
+import static io.github.igorgf.control.Thrown.MatchStrategy.EXACT;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.params.provider.Arguments.argumentSet;
 
@@ -170,9 +172,115 @@ class ThrownTest {
     void recover() {
         var thrown = Thrown.of(new Exception("Hello"));
 
-        var result = thrown.recover(x -> x.getMessage() + " World!");
+        var result = thrown.recover(x -> x.get().getMessage() + " World!");
 
         assertEquals("Hello World!", result);
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "toEither()",
+            when = "\"matchStrategy\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void toEither_MatchStrategyIsNull() {
+        var thrown = Thrown.of(new Exception());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.toEither(
+                null,
+                Either::left,
+                Exception.class
+        ));
+        assertEquals("Contract violation. Argument \"matchStrategy\" is null.", result.getMessage());
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "toEither()",
+            when = "\"mapper\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void toEither_MapperIsNull() {
+        var thrown = Thrown.of(new Exception());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.toEither(
+                ASSIGNABLE,
+                null,
+                Exception.class
+        ));
+        assertEquals("Contract violation. Argument \"mapper\" is null.", result.getMessage());
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "toEither()",
+            when = "\"matchTarget\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void toEither_MatchTargetIsNull() {
+        var thrown = Thrown.of(new Exception());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.toEither(
+                ASSIGNABLE,
+                Either::left,
+                null
+        ));
+        assertEquals("Contract violation. Argument \"matchTarget\" is null.", result.getMessage());
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "toEither()",
+            when = "\"handler\" result is a \"null\"",
+            then = "throws NullResultException"
+    )
+    void toEither_HandlerResultIsNull() {
+        var thrown = Thrown.of(new Exception());
+
+        var result = assertThrows(NullResultException.class, () -> thrown.toEither(
+                EXACT,
+                _ -> null,
+                Exception.class
+        ));
+        assertEquals("Contract violation. Function result is a \"null\".", result.getMessage());
+    }
+
+    @DisplayName("Given toEither(), no match.")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then returns Left or \"this\".")
+    @FieldSource("noMatch_Args")
+    void toEither_NoMatch(
+            MatchStrategy matchStrategy,
+            Throwable captured,
+            Class<? extends Throwable> matchingOn
+    ) {
+        var handlerRan = new AtomicBoolean(false);
+        var thrown = Thrown.of(captured);
+
+        var result = thrown.toEither(
+                matchStrategy,
+                _ -> { throw new RuntimeException("This should never happen"); },
+                matchingOn
+        );
+
+        assertEquals(Either.left(thrown), result);
+        assertFalse(handlerRan.get());
+    }
+
+    @DisplayName("Given toEither().")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then \"mapper\" ran.")
+    @FieldSource("match_Args")
+    <X extends Throwable> void toEither_Match(
+            MatchStrategy matchStrategy,
+            X captured,
+            Class<? extends X> matchingOn
+    ) {
+        var thrown = Thrown.of(captured);
+        var result = thrown.toEither(
+                matchStrategy,
+                t -> Either.right("Good Stuff!" + t.get()),
+                matchingOn
+        );
+        assertEquals(Either.right("Good Stuff!" + captured), result);
     }
     // endregion ———————————————— Transformation Tests ———————————————————
 
@@ -220,175 +328,23 @@ class ThrownTest {
     }
     // endregion ———————————————— Inspection Tests ———————————————————
 
-    // region ——————————————————— handleExact() Tests ———————————————————
-    @Test
-    @GivenWhenThen(
-            given = "handleExact()",
-            when = "\"handler\" is a \"null\"",
-            then = "throws NullArgumentException"
-    )
-    void handleExact_HandlerNull() {
-        var thrown = Thrown.of(new Throwable());
-
-        var result = assertThrows(NullArgumentException.class, () -> thrown.handleExact(null, IOException.class));
-
-        assertEquals("Contract violation. Argument \"handler\" is null.", result.getMessage());
-    }
-
-    @Test
-    @GivenWhenThen(
-            given = "handleExact()",
-            when = "\"exceptionType\" is a \"null\"",
-            then = "throws NullArgumentException"
-    )
-    void handleExact_ExceptionTypeNull() {
-        var thrown = Thrown.of(new Throwable());
-
-        var result = assertThrows(NullArgumentException.class, () -> thrown.handleExact(
-                _ -> {},
-                (Class<? extends Throwable>) null
-        ));
-
-        assertEquals("Contract violation. Argument \"exceptionType\" is null.", result.getMessage());
-    }
-
-    @Test
-    @GivenWhenThen(
-            given = "handleExact()",
-            when = "\"exceptionType\" is an exact match",
-            then = "handler ran"
-    )
-    void handleExact_NoMatch() {
-        RuntimeException x = new IllegalArgumentException("Hello");
-        var handlerSpy = new AtomicReference<Throwable>();
-        var thrown = Thrown.of(x);
-
-        var result = thrown.handleExact(
-                handlerSpy::set,
-                IllegalArgumentException.class
-        );
-
-        assertEquals(thrown, result);
-        assertEquals(x, handlerSpy.get());
-    }
-
-    @DisplayName("Given handleExact().")
-    @ParameterizedTest(name = "{argumentSetName} Then handler NOT ran.")
-    @FieldSource("handleExact_Match_Args")
-    <X extends Throwable> void handleExact_Match(
-            X captured,
-            Class<? extends X> matchingOn
-    ) {
-        var handlerSpy = new AtomicBoolean(false);
-        var thrown = Thrown.of(captured);
-        var result = thrown.handleExact(
-                _ -> handlerSpy.set(true), matchingOn
-        );
-        assertEquals(thrown, result);
-        assertFalse(handlerSpy.get());
-    }
-
-    private static final List<Arguments> handleExact_Match_Args = List.of(
-            argumentSet("When \"captured\" is unchecked, and \"exceptionType\" is a superclass.",
-                    new IllegalArgumentException(), RuntimeException.class
-            ),
-            argumentSet("When \"captured\" is checked, and \"exceptionType\" is a superclass.",
-                    new IOException(), Exception.class
-            ),
-            argumentSet("When \"captured\" extends Throwable, and \"exceptionType\" is Throwable.class.",
-                    new CustomThrowable(), Throwable.class
-            ),
-            argumentSet("When \"exceptionType\" is a subclass.",
-                    new Exception("Hello!"), IllegalArgumentException.class
-            ),
-            argumentSet("When no match.",
-                    new IOException("Hello!"), IllegalArgumentException.class
-            )
-    );
-
-    @Test
-    @GivenWhenThen(
-            given = "handleExact() parameterized",
-            when = "\"handler\" is a \"null\"",
-            then = "throws NullArgumentException"
-    )
-    void handleExactParams_HandlerNull() {
-        var thrown = Thrown.of(new Throwable());
-
-        var result = assertThrows(NullArgumentException.class, () -> thrown.handleExact(null));
-
-        assertEquals("Contract violation. Argument \"handler\" is null.", result.getMessage());
-    }
-
-    @Test
-    @GivenWhenThen(
-            given = "handleExact() parameterized",
-            when = "\"throwables\" is a \"null\"",
-            then = "throws NullArgumentException"
-    )
-    void handleExactParams_ThrowablesNull() {
-        var thrown = Thrown.of(new Throwable());
-
-        var result = assertThrows(NullArgumentException.class, () -> thrown.handleExact(
-                _ -> {},
-                (Class<? extends Throwable>[]) null
-        ));
-
-        assertEquals("Contract violation. Argument \"throwables\" is null.", result.getMessage());
-    }
-
-    @DisplayName("Given handleExact() parameterized.")
-    @ParameterizedTest(name = "{argumentSetName}")
-    @FieldSource("handleExactParams_Match_Args")
-    <X extends Throwable> void handleExactParams_Match(
-            X captured,
-            Class<? extends X>[] matchingOn,
-            boolean shouldHandlerRun
-    ) {
-        var handlerSpy = new AtomicReference<Throwable>();
-        var thrown = Thrown.of(captured);
-        var result = thrown.handle(
-                handlerSpy::set, matchingOn
-        );
-        assertEquals(thrown, result);
-        if (shouldHandlerRun) assertEquals(captured, handlerSpy.get());
-    }
-
-    private static final List<Arguments> handleExactParams_Match_Args = List.of(
-            argumentSet("When \"throwables\" is empty. Then handler should run.",
-                    new IOException(),
-                    new Class<?>[] {},
-                    true
-            ),
-            argumentSet("When \"throwables\" contains superclass. Then handler should not run.",
-                    new IllegalArgumentException(),
-                    new Class<?>[] { NullPointerException.class, Exception.class, IOException.class },
-                    false
-            ),
-            argumentSet("No exact match. Then handler should not run.",
-                    new IllegalArgumentException(),
-                    new Class<?>[] { NullPointerException.class, ContractViolationException.class, IOException.class },
-                    false
-            ),
-            argumentSet("When exact match on first element. Then handler should run.",
-                    new IOException(),
-                    new Class<?>[] { IOException.class, IllegalArgumentException.class, NullPointerException.class },
-                    true
-            ),
-            argumentSet("When exact match on middle element. Then handler should run.",
-                    new CustomThrowable(),
-                    new Class<?>[] { IllegalArgumentException.class, CustomThrowable.class, RuntimeException.class },
-                    true
-            ),
-            argumentSet("When exact match on last element. Then handler should run.",
-                    new IOException(),
-                    new Class<?>[] { IllegalArgumentException.class, IOException.class },
-                    true
-            )
-    );
-    // endregion ———————————————— handleExact() Tests ———————————————————
-
     // region ——————————————————— handle() Tests ———————————————————
+    @Test
+    @GivenWhenThen(
+            given = "handle()",
+            when = "\"matchStrategy\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void handle_MatchStrategyNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.handle(
+                null, _ -> {}, IOException.class
+        ));
+
+        assertEquals("Contract violation. Argument \"matchStrategy\" is null.", result.getMessage());
+    }
+
     @Test
     @GivenWhenThen(
             given = "handle()",
@@ -398,7 +354,9 @@ class ThrownTest {
     void handle_HandlerNull() {
         var thrown = Thrown.of(new Throwable());
 
-        var result = assertThrows(NullArgumentException.class, () -> thrown.handle(null, IOException.class));
+        var result = assertThrows(NullArgumentException.class, () -> thrown.handle(
+                ASSIGNABLE, null, IOException.class
+        ));
 
         assertEquals("Contract violation. Argument \"handler\" is null.", result.getMessage());
     }
@@ -406,33 +364,36 @@ class ThrownTest {
     @Test
     @GivenWhenThen(
             given = "handle()",
-            when = "\"exceptionType\" is a \"null\"",
+            when = "\"matchTarget\" is a \"null\"",
             then = "throws NullArgumentException"
     )
     void handle_ExceptionTypeNull() {
         var thrown = Thrown.of(new Throwable());
 
         var result = assertThrows(NullArgumentException.class, () -> thrown.handle(
+                ASSIGNABLE,
                 _ -> {},
                 (Class<? extends Throwable>) null
         ));
 
-        assertEquals("Contract violation. Argument \"exceptionType\" is null.", result.getMessage());
+        assertEquals("Contract violation. Argument \"matchTarget\" is null.", result.getMessage());
     }
 
-    @Test
-    @GivenWhenThen(
-            given = "handle()",
-            when = "no match",
-            then = "handler not ran"
-    )
-    void handle_NoMatch() {
+    @DisplayName("Given handle(), no match.")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then handler not ran.")
+    @FieldSource("noMatch_Args")
+    void handle_NoMatch(
+            MatchStrategy matchStrategy,
+            Throwable captured,
+            Class<? extends Throwable> matchingOn
+    ) {
         var handlerRan = new AtomicBoolean(false);
-        var thrown = Thrown.of(new Throwable());
+        var thrown = Thrown.of(captured);
 
         var result = thrown.handle(
+                matchStrategy,
                 _ -> handlerRan.set(true),
-                IOException.class
+                matchingOn
         );
 
         assertEquals(thrown, result);
@@ -440,35 +401,37 @@ class ThrownTest {
     }
 
     @DisplayName("Given handle().")
-    @ParameterizedTest(name = "{argumentSetName} Then handler ran.")
-    @FieldSource("handle_Match_Args")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then handler ran.")
+    @FieldSource("match_Args")
     <X extends Throwable> void handle_Match(
+            MatchStrategy matchStrategy,
             X captured,
             Class<? extends X> matchingOn
     ) {
         var handlerSpy = new AtomicReference<Throwable>();
         var thrown = Thrown.of(captured);
         var result = thrown.handle(
-                handlerSpy::set, matchingOn
+                matchStrategy, handlerSpy::set, matchingOn
         );
         assertEquals(thrown, result);
         assertEquals(captured, handlerSpy.get());
     }
 
-    private static final List<Arguments> handle_Match_Args = List.of(
-            argumentSet("When \"captured\" is unchecked, and \"exceptionType\" is a superclass.",
-                    new IllegalArgumentException(), RuntimeException.class
-            ),
-            argumentSet("When \"captured\" is checked, and \"exceptionType\" is a superclass.",
-                    new IOException(), Exception.class
-            ),
-            argumentSet("When \"captured\" extends Throwable, and \"exceptionType\" is Throwable.class.",
-                    new CustomThrowable(), Throwable.class
-            ),
-            argumentSet("When \"exceptionType\" is an exact match.",
-                    new IOException(), IOException.class
-            )
-    );
+    @Test
+    @GivenWhenThen(
+            given = "handle() parameterized",
+            when = "\"matchStrategy\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void handleParams_MatchStrategyNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.handle(
+                null, _ -> {}, IOException.class, IllegalArgumentException.class
+        ));
+
+        assertEquals("Contract violation. Argument \"matchStrategy\" is null.", result.getMessage());
+    }
 
     @Test
     @GivenWhenThen(
@@ -479,7 +442,7 @@ class ThrownTest {
     void handleParams_HandlerNull() {
         var thrown = Thrown.of(new Throwable());
 
-        var result = assertThrows(NullArgumentException.class, () -> thrown.handle(null));
+        var result = assertThrows(NullArgumentException.class, () -> thrown.handle(EXACT, null));
 
         assertEquals("Contract violation. Argument \"handler\" is null.", result.getMessage());
     }
@@ -487,33 +450,36 @@ class ThrownTest {
     @Test
     @GivenWhenThen(
             given = "handle() parameterized",
-            when = "\"throwables\" is a \"null\"",
+            when = "\"matchTargets\" is a \"null\"",
             then = "throws NullArgumentException"
     )
     void handleParams_ThrowablesNull() {
         var thrown = Thrown.of(new Throwable());
 
         var result = assertThrows(NullArgumentException.class, () -> thrown.handle(
+                ASSIGNABLE,
                 _ -> {},
                 (Class<? extends Throwable>[]) null
         ));
 
-        assertEquals("Contract violation. Argument \"throwables\" is null.", result.getMessage());
+        assertEquals("Contract violation. Argument \"matchTargets\" is null.", result.getMessage());
     }
 
-    @Test
-    @GivenWhenThen(
-            given = "handle() parameterized",
-            when = "no match",
-            then = "handler not ran"
-    )
-    void handleParams_NoMatch() {
+    @DisplayName("Given handle() parameterized, no match.")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then handler not ran.")
+    @FieldSource("paramsNoMatch_Args")
+    void handleParams_NoMatch(
+            MatchStrategy matchStrategy,
+            Throwable captured,
+            Class<? extends Throwable>[] matchingOn
+    ) {
         var handlerRan = new AtomicBoolean(false);
-        var thrown = Thrown.of(new Throwable());
+        var thrown = Thrown.of(captured);
 
         var result = thrown.handle(
+                matchStrategy,
                 _ -> handlerRan.set(true),
-                IllegalArgumentException.class, IOException.class
+                matchingOn
         );
 
         assertEquals(thrown, result);
@@ -521,53 +487,320 @@ class ThrownTest {
     }
 
     @DisplayName("Given handle() parameterized.")
-    @ParameterizedTest(name = "{argumentSetName} Then handler ran.")
-    @FieldSource("handleParams_Match_Args")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then handler ran.")
+    @FieldSource("paramsMatch_Args")
     <X extends Throwable> void handleParams_Match(
+            MatchStrategy matchStrategy,
             X captured,
             Class<? extends X>[] matchingOn
     ) {
         var handlerSpy = new AtomicReference<Throwable>();
         var thrown = Thrown.of(captured);
         var result = thrown.handle(
-                handlerSpy::set, matchingOn
+                matchStrategy, handlerSpy::set, matchingOn
         );
         assertEquals(thrown, result);
         assertEquals(captured, handlerSpy.get());
     }
+    // endregion ———————————————— handle() Tests ———————————————————
+
+    // region ——————————————————— rethrow() Tests ———————————————————
+    @Test
+    @GivenWhenThen(
+            given = "rethrow()",
+            when = "\"matchStrategy\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void rethrow_MatchStrategyNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.rethrow(
+                null, IOException.class
+        ));
+
+        assertEquals("Contract violation. Argument \"matchStrategy\" is null.", result.getMessage());
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "rethrow()",
+            when = "\"matchTarget\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void rethrow_ExceptionTypeNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.rethrow(
+                ASSIGNABLE,
+                (Class<? extends Throwable>) null
+        ));
+
+        assertEquals("Contract violation. Argument \"matchTarget\" is null.", result.getMessage());
+    }
+
+    @DisplayName("Given rethrow(), no match.")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then returns \"this\".")
+    @FieldSource("noMatch_Args")
+    void rethrow_NoMatch(
+            MatchStrategy matchStrategy,
+            Throwable captured,
+            Class<? extends Throwable> matchingOn
+    ) throws Throwable {
+        var thrown = Thrown.of(captured);
+
+        var result = thrown.rethrow(
+                matchStrategy,
+                matchingOn
+        );
+
+        assertEquals(thrown, result);
+    }
+
+    @DisplayName("Given rethrow().")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then \"captured\" is thrown.")
+    @FieldSource("match_Args")
+    <X extends Throwable> void rethrow_Match(
+            MatchStrategy matchStrategy,
+            X captured,
+            Class<? extends X> matchingOn
+    ) {
+        var thrown = Thrown.of(captured);
+
+        assertThrows(matchingOn, () -> thrown.rethrow(
+                matchStrategy, matchingOn
+        ));
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "rethrow() parameterized",
+            when = "\"matchStrategy\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void rethrowParams_MatchStrategyNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.rethrow(
+                (MatchStrategy) null, IOException.class, IllegalArgumentException.class
+        ));
+
+        assertEquals("Contract violation. Argument \"matchStrategy\" is null.", result.getMessage());
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "rethrow() parameterized",
+            when = "\"matchTargets\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void rethrowParams_ThrowablesNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.rethrow(
+                ASSIGNABLE,
+                (Class<? extends Throwable>[]) null
+        ));
+
+        assertEquals("Contract violation. Argument \"matchTargets\" is null.", result.getMessage());
+    }
+
+    @DisplayName("Given rethrow() parameterized, no match.")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then returns \"this\".")
+    @FieldSource("paramsNoMatch_Args")
+    void rethrowParams_NoMatch(
+            MatchStrategy matchStrategy,
+            Throwable captured,
+            Class<? extends Throwable>[] matchingOn
+    ) throws Throwable {
+        var thrown = Thrown.of(captured);
+
+        var result = thrown.rethrow(
+                matchStrategy,
+                matchingOn
+        );
+
+        assertEquals(thrown, result);
+    }
+
+    @DisplayName("Given rethrow() parameterized.")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then throws \"captured\".")
+    @FieldSource("paramsMatch_Args")
+    <X extends Throwable> void rethrowParams_Match(
+            MatchStrategy matchStrategy,
+            X captured,
+            Class<? extends X>[] matchingOn
+    ) {
+        var thrown = Thrown.of(captured);
+        assertThrows(captured.getClass(), () -> thrown.rethrow(
+                matchStrategy, matchingOn
+        ));
+    }
+    // endregion ———————————————— rethrow() Tests ———————————————————
+
+    // region ——————————————————— rethrowSneaky() Tests ———————————————————
+    @Test
+    @GivenWhenThen(
+            given = "rethrowSneaky()",
+            when = "\"matchStrategy\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void rethrowSneaky_MatchStrategyNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.rethrowSneaky(
+                (MatchStrategy) null, IOException.class, IllegalArgumentException.class
+        ));
+
+        assertEquals("Contract violation. Argument \"matchStrategy\" is null.", result.getMessage());
+    }
+
+    @Test
+    @GivenWhenThen(
+            given = "rethrowSneaky()",
+            when = "\"matchTargets\" is a \"null\"",
+            then = "throws NullArgumentException"
+    )
+    void rethrowSneaky_ThrowablesNull() {
+        var thrown = Thrown.of(new Throwable());
+
+        var result = assertThrows(NullArgumentException.class, () -> thrown.rethrowSneaky(
+                ASSIGNABLE,
+                (Class<? extends Throwable>[]) null
+        ));
+
+        assertEquals("Contract violation. Argument \"matchTargets\" is null.", result.getMessage());
+    }
+
+    @DisplayName("Given rethrowSneaky(), no match.")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then returns \"this\".")
+    @FieldSource("paramsNoMatch_Args")
+    void rethrowSneaky_NoMatch(
+            MatchStrategy matchStrategy,
+            Throwable captured,
+            Class<? extends Throwable>[] matchingOn
+    ) {
+        var thrown = Thrown.of(captured);
+
+        var result = thrown.rethrowSneaky(
+                matchStrategy,
+                matchingOn
+        );
+
+        assertEquals(thrown, result);
+    }
+
+    @DisplayName("Given rethrowSneaky().")
+    @ParameterizedTest(name = "When \"matchStrategy\" is {0}, and {argumentSetName}. Then throws \"captured\".")
+    @FieldSource("paramsMatch_Args")
+    <X extends Throwable> void rethrowSneaky_Match(
+            MatchStrategy matchStrategy,
+            X captured,
+            Class<? extends X>[] matchingOn
+    ) {
+        var thrown = Thrown.of(captured);
+        assertThrows(captured.getClass(), () -> thrown.rethrow(
+                matchStrategy, matchingOn
+        ));
+    }
+    // endregion ———————————————— rethrowSneaky() Tests ———————————————————
 
     static final class CustomThrowable extends Throwable {}
 
-    private static final List<Arguments> handleParams_Match_Args = List.of(
-            argumentSet("When \"throwables\" is empty.",
+    private static final List<Arguments> noMatch_Args = List.of(
+            argumentSet("\"matchTarget\" is a superclass",
+                    EXACT, new IllegalArgumentException(), RuntimeException.class
+            ),
+            argumentSet("\"matchTarget\" is a subclass",
+                    EXACT, new Exception(), RuntimeException.class
+            ),
+            argumentSet("\"matchTarget\" is not a superclass",
+                    ASSIGNABLE, new IllegalArgumentException(), IOException.class
+            ),
+            argumentSet("\"matchTarget\" is a subclass.",
+                    ASSIGNABLE, new Exception(), RuntimeException.class
+            )
+    );
+
+    private static final List<Arguments> match_Args = List.of(
+            argumentSet("\"matchTarget\" is a superclass",
+                    ASSIGNABLE, new IllegalArgumentException(), RuntimeException.class
+            ),
+            argumentSet("\"captured\" extends Throwable, and \"matchTarget\" is Throwable.class",
+                    ASSIGNABLE, new CustomThrowable(), Throwable.class
+            ),
+            argumentSet("\"matchTarget\" is an exact match",
+                    ASSIGNABLE, new IOException(), IOException.class
+            ),
+            argumentSet("\"matchTarget\" is an exact match",
+                    EXACT, new IOException(), IOException.class
+            )
+    );
+
+    private static final List<Arguments> paramsNoMatch_Args = List.of(
+            argumentSet("\"matchTargets\" contains superclass",
+                    EXACT,
+                    new IllegalArgumentException(),
+                    new Class<?>[] { RuntimeException.class, Exception.class }
+            ),
+            argumentSet("\"matchTargets\" contains subclass.",
+                    EXACT,
+                    new Exception(),
+                    new Class<?>[] { RuntimeException.class, IOException.class }
+            ),
+            argumentSet("\"matchTargets\" no match",
+                    ASSIGNABLE,
+                    new IllegalArgumentException(),
+                    new Class<?>[] { IOException.class, CustomThrowable.class }
+            ),
+            argumentSet("\"matchTargets\" contains subclass",
+                    ASSIGNABLE,
+                    new Exception(),
+                    new Class<?>[] { RuntimeException.class, IOException.class }
+            )
+    );
+
+    private static final List<Arguments> paramsMatch_Args = List.of(
+            //assignable
+            argumentSet("\"matchTargets\" is empty",
+                    ASSIGNABLE,
                     new IOException(),
                     new Class<?>[] {}
             ),
-            argumentSet("When \"captured\" is unchecked, and \"throwables\" contains superclass.",
+            argumentSet("\"matchTargets\" contains superclass",
+                    ASSIGNABLE,
                     new IllegalArgumentException(),
                     new Class<?>[] { NullPointerException.class, Exception.class, IOException.class }
             ),
-            argumentSet("When \"captured\" is checked, and \"throwables\" contains superclass.",
-                    new IOException(),
-                    new Class<?>[] { IllegalArgumentException.class, Exception.class }
-            ),
-            argumentSet("When \"captured\" extends Throwable, and \"throwables\" contains Throwable.",
+            argumentSet("\"matchTargets\" contains Throwable",
+                    ASSIGNABLE,
                     new CustomThrowable(),
                     new Class<?>[] { IllegalArgumentException.class, Throwable.class }
             ),
-            argumentSet("When \"throwables\" contains exact match.",
+            argumentSet("\"matchTargets\" contains exact match",
+                    ASSIGNABLE,
                     new IOException(),
                     new Class<?>[] { IOException.class, IllegalArgumentException.class }
+            ),
+            //exact
+            argumentSet("\"matchTargets\" is empty",
+                    EXACT,
+                    new IOException(),
+                    new Class<?>[] {}
+            ),
+            argumentSet("match on first element",
+                    EXACT,
+                    new IOException(),
+                    new Class<?>[] { IOException.class, IllegalArgumentException.class, NullPointerException.class }
+            ),
+            argumentSet("match on middle element",
+                    EXACT,
+                    new CustomThrowable(),
+                    new Class<?>[] { IllegalArgumentException.class, CustomThrowable.class, RuntimeException.class }
+            ),
+            argumentSet("match on last element",
+                    EXACT,
+                    new IOException(),
+                    new Class<?>[] { IllegalArgumentException.class, IOException.class }
             )
     );
-    // endregion ———————————————— handle() Tests ———————————————————
-
-    //TODO: add rethrow tests
-
-    //TODO: add rethrow exact tests
-
-    //TODO: add rethrowSneaky tests
-
-    //TODO: add rethrowIf tests
-
 }

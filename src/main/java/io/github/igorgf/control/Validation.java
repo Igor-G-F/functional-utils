@@ -1,5 +1,6 @@
 package io.github.igorgf.control;
 
+import io.github.igorgf.control.Invalid.Severity;
 import io.github.igorgf.function.CheckedBiFunction;
 import io.github.igorgf.function.CheckedFunction;
 import io.github.igorgf.function.CheckedSupplier;
@@ -158,14 +159,14 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
 
     /**
      * A convenience factory method overload for
-     * {@link #validateNotNull(Object, Supplier, boolean)}.
+     * {@link #validateNotNull(Object, Supplier, Severity)}.
      * <p>
      * This method always assumes that a {@code null} {@code target} is a
      * {@link Critical}.
      *
      * @see Valid
      * @see Critical
-     * @see #validateNotNull(Object, Supplier, boolean)
+     * @see #validateNotNull(Object, Supplier, Severity)
      *
      * @param <T> The type of the object being validated.
      * @param <E> The error type reference.
@@ -184,7 +185,7 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
             T target,
             Supplier<E> errorSupplier
     ) throws NullArgumentException, NullResultException {
-        return validateNotNull(target, errorSupplier, true);
+        return validateNotNull(target, errorSupplier, Severity.CRITICAL);
     }
 
     /**
@@ -199,18 +200,18 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      * @param <E> The error type reference.
      * @param target The value to be validated.
      * @param errorSupplier Error provider should the result be {@link Invalid}.
-     * @param critical If {@code true} then an {@link Invalid} result will be of
-     *        type {@code Critical<E, T>}. If {@code false} the result type will
+     * @param severity If {@link Severity#CRITICAL} then result will be of
+     *        type {@code Critical<E, T>}. Otherwise, the result type will
      *        be {@code Accumulated<E, T>}.
      *
      * @return {@code Valid<E, T>}, containing {@code target}, when
      *         {@code target} is NOT a {@code null}. <br>
      *         {@code Accumulated<E, T>}, containing product of
      *         {@code errorSupplier}, when {@code target} is a {@code null}
-     *         and {@code critical} is {@code false}. <br>
+     *         and {@code severity} is {@link Severity#ACCUMULATED}. <br>
      *         {@code Critical<E, T>}, containing product of
      *         {@code errorSupplier}, when {@code target} is a {@code null}
-     *          and {@code critical} is {@code true}.
+     *          and {@code severity} is {@link Severity#CRITICAL}.
      *
      * @throws NullArgumentException If {@code errorSupplier}is a {@code null}.
      * @throws NullResultException If {@code errorSupplier} returns a {@code null}.
@@ -218,18 +219,21 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
     static <E, T> Validation<E, T> validateNotNull(
             T target,
             Supplier<E> errorSupplier,
-            boolean critical
+            Severity severity
     ) throws NullArgumentException, NullResultException {
-        requireNonNull(critical, "critical");
+        requireNonNull(severity, "severity");
         requireNonNull(errorSupplier, "errorSupplier");
         if (target != null) return valid(target);
         var error = requireNonNullResult(errorSupplier::get, "errorSupplier");
-        return critical ? critical(error) : accumulated(error);
+        return switch (severity) {
+            case ACCUMULATED -> accumulated(error);
+            case CRITICAL -> critical(error);
+        };
     }
 
     /**
      * A convenience factory method for creating a {@code Validation<E, T>}
-     * based on the result of {@code value} being tested against
+     * based on the result of {@code target} being tested against
      * {@code predicate}.
      *
      * @see Valid
@@ -239,20 +243,20 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
      * @param <T> The type of the object being validated.
      * @param <E> The error type reference.
      * @param target The value to be validated.
-     * @param predicate The condition tested against {@code value}.
+     * @param predicate The condition tested against {@code target}.
      * @param errorMapper Error provider should the result be {@link Invalid}.
-     * @param critical If {@code true} then an {@link Invalid} result will be of
-     *        type {@code Critical<E, T>}. If {@code false} the result type will
+     * @param severity If {@link Severity#CRITICAL} then result will be of
+     *        type {@code Critical<E, T>}. Otherwise, the result type will
      *        be {@code Accumulated<E, T>}.
      *
-     * @return {@code Valid<E, T>}, containing {@code value}, when
+     * @return {@code Valid<E, T>}, containing {@code target}, when
      *         {@code predicate} returns {@code true}. <br>
      *         {@code Accumulated<E, T>}, containing result of
      *         {@code errorMapper}, when {@code predicate} returns {@code false}
-     *         and {@code critical} is {@code false}. <br>
+     *         and {@code severity} is {@link Severity#ACCUMULATED}. <br>
      *         {@code Critical<E, T>}, containing result of {@code errorMapper},
-     *         when {@code predicate} returns {@code false} and {@code critical}
-     *         is {@code true}.
+     *         when {@code predicate} returns {@code false} and {@code severity}
+     *         is {@link Severity#CRITICAL}.
      *         
      * @throws NullArgumentException If any of the supplied method arguments are
      *         a {@code null}.
@@ -261,28 +265,31 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
             T target,
             Predicate<? super T> predicate,
             Function<? super T, ? extends E> errorMapper,
-            boolean critical
+            Severity severity
     ) throws NullArgumentException {
-        requireNonNull(target, "value");
+        requireNonNull(target, "target");
         requireNonNull(predicate, "predicate");
         requireNonNull(errorMapper, "errorMapper");
         if (predicate.test(target)) {
             return valid(target);
         }
         var error = errorMapper.apply(target);
-        requireNonNull(critical, "critical");
-        return critical ? critical(error) : accumulated(error);
+        requireNonNull(severity, "severity");
+        return switch (severity) {
+            case ACCUMULATED -> accumulated(error);
+            case CRITICAL -> critical(error);
+        };
     }
 
     /**
      * A convenience factory method overload for
-     * {@link #validate(Object, Predicate, Function, boolean)}.
+     * {@link #validate(Object, Predicate, Function, Severity)}.
      * <p>
      * This method always assumes that any error is {@link Accumulated}.
      *
      * @see Valid
      * @see Accumulated
-     * @see #validate(Object, Predicate, Function, boolean)
+     * @see #validate(Object, Predicate, Function, Severity)
      *
      * @param <T> The type of the object being validated.
      * @param <E> The error type reference.
@@ -305,7 +312,7 @@ public sealed interface Validation<E, T> permits Valid, Invalid {
             Predicate<? super T> predicate,
             Function<? super T, ? extends E> errorMapper
     ) {
-        return validate(target, predicate, errorMapper, false);
+        return validate(target, predicate, errorMapper, Severity.ACCUMULATED);
     }
 
     /**
