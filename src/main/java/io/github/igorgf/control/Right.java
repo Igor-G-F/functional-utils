@@ -4,6 +4,9 @@ import io.github.igorgf.function.CheckedFunction;
 
 import java.util.Objects;
 
+import static io.github.igorgf.control.ControlUtils.requireNonNull;
+import static io.github.igorgf.control.ControlUtils.requireNonNullResult;
+
 /**
  * The right {@code R} value implementation of {@code Either<L, R>}.
  * <p>
@@ -18,7 +21,7 @@ import java.util.Objects;
  */
 public record Right<L, R>(R value) implements Either<L, R> {
 
-    public Right { Objects.requireNonNull(value); }
+    public Right { requireNonNull(value, "value"); }
 
     /**
      * {@inheritDoc}
@@ -27,16 +30,43 @@ public record Right<L, R>(R value) implements Either<L, R> {
      *         {@code rightMapper}
      *
      * @throws X2 {@inheritDoc}
-     * @throws NullPointerException If the {@code rightMapper} is {@code null}
-     *         or returns a {@code null}.
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
     public <S, T, X1 extends Exception, X2 extends Exception> Either<S, T> bimap(
             CheckedFunction<? super L, ? extends S, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
-    ) throws X2 {
-        Objects.requireNonNull(rightMapper);
-        return Either.right(rightMapper.apply(value));
+    ) throws X2, NullArgumentException, NullResultException {
+        requireNonNull(rightMapper, "rightMapper");
+        var result = requireNonNullResult(rightMapper, value);
+        return new Right<>(result);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The cast in this method is provably safe as only the left value is
+     * contained here.
+     */
+    @SuppressWarnings("unchecked")
+    @Override
+    public <S, X extends Exception> Either<S, R> mapLeft(
+            CheckedFunction<? super L, ? extends S, ? extends X> leftMapper
+    ) {
+        return (Either<S, R>) this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public <S, X extends Exception> Either<L, S> mapRight(
+            CheckedFunction<? super R, ? extends S, ? extends X> rightMapper
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(rightMapper, "rightMapper");
+        var result = requireNonNullResult(rightMapper, value);
+        return new Right<>(result);
     }
 
     /**
@@ -45,16 +75,41 @@ public record Right<L, R>(R value) implements Either<L, R> {
      * @return {@code Either<S, T>} returned by the {@code rightMapper}.
      *
      * @throws X2 {@inheritDoc}
-     * @throws NullPointerException If the {@code rightMapper} is {@code null}
-     *         or returns a {@code null}.
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
     public <S, T, X1 extends Exception, X2 extends Exception> Either<S, T> biflatMap(
             CheckedFunction<? super L, ? extends Either<S, T>, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends Either<S, T>, ? extends X2> rightMapper
-    ) throws X2 {
-        Objects.requireNonNull(rightMapper);
-        return Objects.requireNonNull(rightMapper.apply(this.value));
+    ) throws X2, NullArgumentException, NullResultException {
+        requireNonNull(rightMapper, "rightMapper");
+        return requireNonNullResult(rightMapper, value);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The cast in this method is provably safe as only the left value is
+     * contained here.
+     */
+    @SuppressWarnings("unchecked")
+    @Override
+    public <S, X extends Exception> Either<S, R> flatMapLeft(
+            CheckedFunction<? super L, ? extends Either<S, R>, ? extends X> leftMapper
+    ) {
+        return (Either<S, R>) this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public <S, X extends Exception> Either<L, S> flatMapRight(
+            CheckedFunction<? super R, ? extends Either<L, S>, ? extends X> rightMapper
+    ) throws X, NullArgumentException, NullResultException {
+        requireNonNull(rightMapper, "rightMapper");
+        return requireNonNullResult(rightMapper, value);
     }
 
     /**
@@ -74,14 +129,14 @@ public record Right<L, R>(R value) implements Either<L, R> {
      * @return {@code T} returned by the {@code rightMapper}.
      *
      * @throws X2 {@inheritDoc}
-     * @throws NullPointerException If the {@code rightMapper} is {@code null}
-     *         or returns a {@code null}.
+     * @throws NullArgumentException {@inheritDoc}
+     * @throws NullResultException {@inheritDoc}
      */
     @Override
     public <T, X1 extends Exception, X2 extends Exception> T fold(
             CheckedFunction<? super L, ? extends T, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
-    ) throws X2 {
+    ) throws X2, NullArgumentException, NullResultException {
         Objects.requireNonNull(rightMapper);
         return Objects.requireNonNull(rightMapper.apply(value));
     }

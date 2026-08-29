@@ -3,8 +3,6 @@ package io.github.igorgf.control;
 import io.github.igorgf.function.CheckedFunction;
 import io.github.igorgf.function.CheckedSupplier;
 
-import java.util.Objects;
-
 /**
  * A disjoint union (sum type) representing exactly one of two possible
  * outcomes: {@code Left<L>} or {@code Right<R>}. This is <b>NOT</b> a
@@ -17,8 +15,8 @@ import java.util.Objects;
  *       Is <b>null safe</b>: {@link Left} or {@link Right} can never contain a
  *       null value, {@code Either} does not expose any null value entry or
  *       exit. The entire API rejects {@code null} at every boundary:
- *       constructors, mapping functions, and suppliers all throw
- *       {@link NullPointerException} on {@code null}.
+ *       constructors, mapping functions, and suppliers all throw appropriate
+ *       {@link ContractViolationException} on {@code null}.
  *   </li>
  *   <li>
  *       A <b>bi-functor</b>: {@link #bimap} transforms both {@link Left} and
@@ -33,32 +31,13 @@ import java.util.Objects;
  *       A <b>catamorphism</b>: {@link #fold} collapses both possible states
  *       ({@link Left} and {@link Right}) into a single value.
  *   </li>
+ *   <li>
+ *       Is <b>exception fluent:</b> Operations use the checked function aware
+ *       functional interfaces from {@link io.github.igorgf.function}, to ensure
+ *       checked exception propagation support.
+ *   </li>
  * </ul>
  * <p>
- * <b>Exception Handling:</b><br>
- * Methods accepting a {@link CheckedFunction} or {@link CheckedSupplier}
- * propagate checked exceptions transparently through a generic
- * {@code X extends Exception} parameter. The compiler will only require
- * handling if checked exceptions are explicitly declared or thrown in the
- * lambda body. Unchecked exceptions ({@link RuntimeException}) propagate
- * normally and require no declaration. Example of checked exception handling:
- * <pre>{@code
- *     try {
- *         Either.left(7).bimap(n -> {
- *             if (n < 10) throw new Exception();
- *             return n * n;
- *         }, o -> o);
- *     } catch (Exception e) {
- *         // e has to be handled as it propagated from map
- *     }
- * }</pre>
- * While throwing unchecked exceptions does not require explicit handling:
- * <pre>{@code
- *     Either.left(7).bimap(n -> {
- *         if (n < 10) throw new RuntimeException();
- *         return n * n;
- *     }, o -> o);
- * }</pre>
  * <b>Alternative Types:</b><br>
  * For accumulating multiple validation errors, use {@link Validation}. <br>
  * For single value presence or absence handling, use {@link Option}.
@@ -85,9 +64,9 @@ public sealed interface Either<L, R> permits Right, Left {
      *
      * @return A new {@code Left<L, R>} instance.
      *
-     * @throws NullPointerException If {@code value} is {@code null}.
+     * @throws NullArgumentException If {@code value} is {@code null}.
      */
-    static <L, R> Either<L, R> left(L value) {
+    static <L, R> Either<L, R> left(L value) throws NullArgumentException {
         return new Left<>(value);
     }
 
@@ -102,9 +81,9 @@ public sealed interface Either<L, R> permits Right, Left {
      *
      * @return A new {@code RightLeft<L, R>} instance.
      *
-     * @throws NullPointerException If {@code value} is {@code null}.
+     * @throws NullArgumentException If {@code value} is {@code null}.
      */
-    static <L, R> Either<L, R> right(R value) {
+    static <L, R> Either<L, R> right(R value) throws NullArgumentException {
         return new Right<>(value);
     }
 
@@ -143,14 +122,39 @@ public sealed interface Either<L, R> permits Right, Left {
      *         propagated to the caller.
      * @throws X2 If the {@code rightMapper} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code leftMapper} or {@code rightMapper}
-     *         is {@code null} during lazy evaluation. Or if either mapping
-     *         returns a {@code null}.
+     * @throws NullArgumentException If {@code leftMapper} or {@code rightMapper}
+     *         is a {@code null}.
+     * @throws NullResultException If {@code leftMapper} or {@code rightMapper}
+     *         return a {@code null}.
      */
     <S, T, X1 extends Exception, X2 extends Exception> Either<S, T> bimap(
             CheckedFunction<? super L, ? extends S, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
-    ) throws X1, X2;
+    ) throws X1, X2, NullArgumentException, NullResultException;
+
+    /**
+     * An alternative to {@link #bimap(CheckedFunction, CheckedFunction)} that
+     * only operates on the {@link Left} case of this {@code Either}. If this is
+     * a {@link Right} this operation is ignored.
+     *
+     * @see #bimap(CheckedFunction, CheckedFunction)
+     * @see #mapRight(CheckedFunction)
+     */
+    <S, X extends Exception> Either<S, R> mapLeft(
+            CheckedFunction<? super L, ? extends S, ? extends X> leftMapper
+    ) throws X, NullArgumentException, NullResultException;
+
+    /**
+     * An alternative to {@link #bimap(CheckedFunction, CheckedFunction)} that
+     * only operates on the {@link Right} case of this {@code Either}. If this
+     * is a {@link Left} this operation is ignored.
+     *
+     * @see #bimap(CheckedFunction, CheckedFunction)
+     * @see #mapLeft(CheckedFunction)
+     */
+    <S, X extends Exception> Either<L, S> mapRight(
+            CheckedFunction<? super R, ? extends S, ? extends X> rightMapper
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * The <b>bi-functor monadic chaining</b> operation of {@link Either}.
@@ -164,7 +168,7 @@ public sealed interface Either<L, R> permits Right, Left {
      * not wrap it within an additional {@code Either}.
      * <p>
      * If either mapping returns a {@code null} then this method throws a
-     * {@link NullPointerException}. Each mapper must always return a
+     * {@link NullArgumentException}. Each mapper must always return a
      * {@code ? extends Either<S, T>}.
      * <p>
      * The {@code rightMapper} and {@code leftMapper} don't have to be concerned
@@ -192,14 +196,39 @@ public sealed interface Either<L, R> permits Right, Left {
      *         propagated to the caller.
      * @throws X2 If the {@code rightMapper} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code leftMapper} or {@code rightMapper}
-     *         is {@code null} during lazy evaluation. Or if either mapping
-     *         returns a {@code null}.
+     * @throws NullArgumentException If {@code leftMapper} or {@code rightMapper}
+     *         is a {@code null}.
+     * @throws NullResultException If {@code leftMapper} or {@code rightMapper}
+     *         return a {@code null}.
      */
     <S, T, X1 extends Exception, X2 extends Exception> Either<S, T> biflatMap(
             CheckedFunction<? super L, ? extends Either<S, T>, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends Either<S, T>, ? extends X2> rightMapper
-    ) throws X1, X2;
+    ) throws X1, X2, NullArgumentException, NullResultException;
+
+    /**
+     * An alternative to {@link #biflatMap(CheckedFunction, CheckedFunction)}
+     * that only operates on the {@link Left} case of this {@code Either}. If
+     * this is a {@link Right} this operation is ignored.
+     *
+     * @see #biflatMap(CheckedFunction, CheckedFunction)
+     * @see #flatMapRight(CheckedFunction)
+     */
+    <S, X extends Exception> Either<S, R> flatMapLeft(
+            CheckedFunction<? super L, ? extends Either<S, R>, ? extends X> leftMapper
+    ) throws X, NullArgumentException, NullResultException;
+
+    /**
+     * An alternative to {@link #biflatMap(CheckedFunction, CheckedFunction)}
+     * that only operates on the {@link Right} case of this {@code Either}. If
+     * this is a {@link Left} this operation is ignored.
+     *
+     * @see #biflatMap(CheckedFunction, CheckedFunction)
+     * @see #flatMapLeft(CheckedFunction)
+     */
+    <S, X extends Exception> Either<L, S> flatMapRight(
+            CheckedFunction<? super R, ? extends Either<L, S>, ? extends X> rightMapper
+    ) throws X, NullArgumentException, NullResultException;
 
     /**
      * The <b>catamorphism</b> operation of {@link Either}. Collapses both
@@ -232,14 +261,15 @@ public sealed interface Either<L, R> permits Right, Left {
      *         propagated to the caller.
      * @throws X2 If the {@code rightMapper} throws a checked exception, it is
      *         propagated to the caller.
-     * @throws NullPointerException If {@code leftMapper} or {@code rightMapper}
-     *         is {@code null} during lazy evaluation. Or if either mapping
-     *         returns a {@code null}.
+     * @throws NullArgumentException If {@code leftMapper} or {@code rightMapper}
+     *         is a {@code null}.
+     * @throws NullResultException If {@code leftMapper} or {@code rightMapper}
+     *         return a {@code null}.
      */
     <T, X1 extends Exception, X2 extends Exception> T fold(
             CheckedFunction<? super L, ? extends T, ? extends X1> leftMapper,
             CheckedFunction<? super R, ? extends T, ? extends X2> rightMapper
-    ) throws X1, X2;
+    ) throws X1, X2, NullArgumentException, NullResultException;
 
     /**
      * Swaps the left and right values into their opposite container, preserving
